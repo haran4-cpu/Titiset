@@ -1,0 +1,58 @@
+// one command for everything: build (parse guard + smoke run) → engine tests → score-format tests → browser tests (a local
+// server is started for them) → musical metrics (reported, not graded here). `--full` adds the critic over every genre
+// (verify_all, seed 11) and the sound audit. Exit code 0 only when every graded step passed.
+// `--gate` (the release gate, run before anything is handed over) adds the browser certification of every genre, a 10-minute
+// monkey soak on the real engine and a 3-minute soak on the fallback engine.
+// `--hogs=N` runs the whole thing next to N busy CPU processes (a loaded laptop, or a CI box shared with other jobs): the logic checks must still pass. Real-time checks can
+// fail on a starved core: dock key change < 1.5 s, phaselock 0.05 beat, live-ui MIDI clock timestamps, the capture and midi-quality steps, and the suites that count sound-card dropouts (jumps, stall, soak, cert).
+// Usage: node tools/ci.cjs [--full | --gate] [--no-browser] [--only name,name] [--hogs=N]
+const { spawnSync, spawn } = require('child_process'), path = require('path'), fs = require('fs'), os = require('os');
+const ROOT = path.join(__dirname, '..'), args = process.argv.slice(2), GATE = args.includes('--gate'), FULL = GATE || args.includes('--full'), NOB = args.includes('--no-browser');
+const ONLY = (() => { const i = args.indexOf('--only'); if (i < 0) return null; if (!args[i + 1] || args[i + 1].startsWith('--')) { console.error('--only needs a comma-separated list of step names'); process.exit(2); } return new Set(args[i + 1].split(',')); })();
+const OUT = fs.mkdtempSync(path.join(os.tmpdir(), 'forge-ci-'));
+const HOGS = (() => { const a = args.find((x) => x.startsWith('--hogs')); if (!a) return 0; const n = Number(a.split('=')[1]); if (!/^--hogs=\d+$/.test(a) || n < 1 || n > 64) { console.error('--hogs needs a count: --hogs=2'); process.exit(2); } return n; })();
+// each hog burns a core and checks every ~30 ms that this process is still alive, so none is left running when ci.cjs is killed (a signal skips the 'exit' handler)
+const HOG = 'const p = +process.argv[1]; for (;;) { for (let i = 0; i < 3e7; i++); try { process.kill(p, 0); } catch (e) { process.exit(0); } }';
+const hogs = []; for (let k = 0; k < HOGS; k++) hogs.push(spawn(process.execPath, ['-e', HOG, String(process.pid)], { stdio: 'ignore' }));
+process.on('exit', () => hogs.forEach((h) => { try { h.kill('SIGKILL'); } catch (e) { /* gone */ } }));
+if (HOGS) console.log(`⚠ ${HOGS} busy CPU process(es) next to the tests on ${os.cpus().length} core(s): a loaded-machine run, not a normal pass`);
+const AUDIO_G = 'techno,trance,deep-house,dnb,lofi,ambient,synthwave,amapiano';
+const STEPS = [
+  ['build', ['tools/build.cjs'], 'graded'],
+  ['spec', ['tools/spec_test.cjs'], 'graded'], ['timing', ['tools/timing_test.cjs'], 'graded'], ['at', ['tools/at_test.cjs'], 'graded'], ['live', ['tools/live_test.cjs'], 'graded'], ['flows', ['tools/engine_flows_test.cjs'], 'graded'], ['fx', ['tools/fx_test.cjs'], 'graded'], ['cue', ['tools/cue_test.cjs'], 'graded'],
+  ['rhythm', ['tools/rhythm_stats.cjs'], 'graded'], ['beatfx', ['tools/beatfx_test.cjs'], 'graded'], ['tx-styles', ['tools/tx_styles_test.cjs'], 'graded'], ['tx-variety', ['tools/tx_variety_test.cjs'], 'graded'], // (v9.3)
+  ['bank', ['tools/bank_test.cjs'], 'graded'], ['pitch', ['tools/pitch_test.cjs'], 'graded'], ['blocks', ['tools/block_test.cjs'], 'graded'], ['motion', ['tools/motion_test.cjs'], 'graded'], ['knobs', ['tools/knob_test.cjs'], 'graded'], ['truepeak', ['tools/truepeak_test.cjs', 'all', '1'], 'graded'], ['wasm', ['tools/wasm_test.cjs'], 'graded'], ['signature', ['tools/signature_test.cjs'], 'graded'], ['deadcode', ['tools/deadcode_check.cjs'], 'graded'], ['startup', ['tools/startup_test.cjs', '4'], 'browser'], ['jumps', ['tools/jump_test.cjs', '10'], 'browser'], ['layout', ['tools/layout_test.cjs', OUT], 'browser'], ['export', ['tools/export_test.cjs', OUT], 'browser'], ['midiclock', ['tools/midiclock_test.cjs'], 'browser'], ['phaselock', ['tools/phaselock_test.cjs'], 'browser'], ['health', ['tools/health_test.cjs', OUT], 'browser'], ['controls', ['tools/controls_test.cjs', 'techno'], 'graded'], ['cpu', ['tools/cpu_bench.cjs', 'all', '4', '--reps=2'], 'graded'],
+  ['browser', ['tools/browser_test.cjs', OUT], 'browser'], ['flows-ui', ['tools/flows_ui_test.cjs', OUT], 'browser'], ['dock', ['tools/dock_test.cjs', OUT], 'browser'], ['live-ui', ['tools/live_ui_test.cjs', OUT], 'browser'],
+  ['perform-ui', ['tools/perform_ui_test.cjs', OUT], 'browser'], ['ui-shell', ['tools/ui_shell_test.cjs', OUT], 'browser'], ['ask-ui', ['tools/ask_ui_test.cjs', OUT], 'browser'], ['auto-ui', ['tools/auto_ui_test.cjs', OUT, '70'], 'browser'], ['auto-move', ['tools/auto_move_test.cjs', OUT], 'browser'], ['hosted', ['tools/hosted_test.cjs', OUT], 'browser'], ['ai-models', ['tools/ai_models_test.cjs', OUT], 'browser'], ['offline', ['tools/offline_test.cjs'], 'browser'], ['liveset', ['tools/liveset_stress.cjs', '2', '90', '--slow=3'], 'browser'], ['stall', ['tools/stall_test.cjs', OUT], 'browser'], ['soak', ['tools/soak_test.cjs', OUT, '4', '1'], 'browser'],
+  // the audio measured by tools that share no code with the engine (ffmpeg, numpy/scipy; a missing tool is reported as "unavailable", never as a pass): every genre's loudness / tempo / clipping, the pitch of every part against its notes,
+  // the real engines' output captured in a browser, the MIDI clock as a receiver sees it, and the hardware-check page. --full runs every genre, the default a spread of eight.
+  ['audio', ['tools/wav_audit.cjs', FULL ? 'all' : AUDIO_G, '1'], 'graded'], ['audio-parts', ['tools/part_audit.cjs', FULL ? 'all' : AUDIO_G, '1', '8', '--quiet'], 'graded'],
+  ['capture', ['tools/capture_test.cjs', OUT, FULL ? 'live,fast,buffered' : 'live,buffered'], 'browser'], ['midi-quality', ['tools/midi_quality_test.cjs'], 'browser'], ['selfcheck', ['tools/selfcheck_test.cjs', '15', 'http://localhost:8765', FULL ? 'live,buffered' : 'live'], 'browser'],
+  ['stabs', ['tools/stab_metrics.cjs'], 'info'], ['voicing', ['tools/voicing_metrics.cjs', 'all', '2'], 'info'], ['dialogue', ['tools/dialogue_metrics.cjs', 'all', '2'], 'info'], ['texture', ['tools/texture_metrics.cjs'], 'info'],
+  ...(GATE ? [['cert', ['tools/cert_test.cjs', OUT], 'browser'], ['soak-long', ['tools/soak_test.cjs', OUT, '10', '7'], 'browser'], ['soak-fallback', ['tools/soak_test.cjs', OUT, '3', '5', '--fallback'], 'browser'], ['arrangement', ['tools/arrangement_metrics.cjs', '-', 'all', '3'], 'info'], ['balance', ['tools/balance_metrics.cjs', 'all', '1,2'], 'info']] : []),
+  ...(FULL ? [['verify', ['tools/verify_all.cjs', 'all', '11', path.join(OUT, 'v.jsonl')], 'graded'], ['audit', ['tools/audit.cjs'], 'info']] : []),
+];
+if (ONLY) { const known = new Set(STEPS.map((s) => s[0])), unknown = [...ONLY].filter((n) => !known.has(n)); if (unknown.length) { console.error(`unknown step: ${unknown.join(', ')} — known steps: ${[...known].join(', ')}${FULL ? '' : ' (verify and audit need --full, cert and the soaks need --gate)'}`); process.exit(2); } }
+let server = null; const needBrowser = !NOB && STEPS.some(([n, , k]) => k === 'browser' && (!ONLY || ONLY.has(n)));
+// (v9.2) a server already on the port must serve THIS tree's build: 9.1 reused any server that answered, and could test another tree
+async function up() { if (!needBrowser) return; const ok = await fetchOk(); if (ok) { const mine = fs.readFileSync(path.join(ROOT, 'dist', 'test.html'), 'utf8'), served = await fetchText(); if (served !== mine) { console.error('port 8765 serves a different build than dist/ — stop that server (or serve this tree\'s dist) and run again'); process.exit(2); } return; } server = spawn('python3', ['-m', 'http.server', '8765'], { cwd: path.join(ROOT, 'dist'), stdio: 'ignore' }); for (let k = 0; k < 40 && !(await fetchOk()); k++) await new Promise((r) => setTimeout(r, 150)); }
+function fetchText() { return new Promise((res) => { require('http').get('http://localhost:8765/test.html', (r) => { let b = ''; r.setEncoding('utf8'); r.on('data', (d) => { b += d; }); r.on('end', () => res(b)); }).on('error', () => res('')); }); }
+function fetchOk() { return new Promise((res) => { require('http').get('http://localhost:8765/test.html', (r) => { r.resume(); res(r.statusCode === 200); }).on('error', () => res(false)); }); }
+// why a step crashed: Node prints the source line, a caret line (^), a blank line, then the error. Playwright errors read "page.evaluate: TypeError: …" or
+// "TimeoutError: page.click: …", so the line is taken by its position after the last caret, not by its first word (a first-word match shows only "Node.js v22…")
+const crashLine = (out) => { const L = out.split('\n'), caret = L.map((l, i) => (/^\s*\^+\s*$/.test(l) ? i : -1)).filter((i) => i >= 0).pop(); return (caret != null ? L.slice(caret + 1).find((l) => l.trim()) : L.find((l) => /\b[A-Za-z]*Error\b/.test(l))) || ''; };
+(async () => { const rows = []; let failed = 0, skipped = 0, ran = 0, gradedRan = 0;
+  for (const [name, cmd, kind] of STEPS) { if (ONLY && !ONLY.has(name)) continue; const needCores = name === 'liveset' ? 2 : 0; // this test shares the browser's cores with busy processes: on one core every run fails whatever the engine does, so it is not a test there
+    if (needCores && os.cpus().length < needCores && !(ONLY && ONLY.has(name))) { rows.push([name, 'skipped', 0, '']); skipped++; console.log(`○ ${name.padEnd(11)}      skipped (needs ${needCores}+ CPU cores, this machine has ${os.cpus().length}: run it elsewhere, or name it with --only to force it)`); continue; }
+    if (kind === 'browser' && NOB) { rows.push([name, 'skipped', 0, '']); skipped++; console.log(`○ ${name.padEnd(11)}      skipped (--no-browser)`); continue; }
+    if (kind === 'browser') await up();
+    const t0 = Date.now(), r = spawnSync('node', cmd, { cwd: ROOT, encoding: 'utf8', timeout: 45 * 60 * 1000, maxBuffer: 64 << 20 }), sec = (Date.now() - t0) / 1000;
+    const out = (r.stdout || '') + (r.stderr || ''), last = out.trim().split('\n').filter((l) => !/agent-proxy|__agentproxy|connect_rejected|For details/.test(l)).pop() || '', crashed = /^Node\.js v\d/m.test(out) && crashLine(out), shown = crashed || last;
+    if (r.status === 0 && /unavailable \(.*nothing was checked/.test(out) && kind !== 'info') { rows.push([name, 'skipped', sec, shown.slice(0, 150)]); skipped++; console.log(`○ ${name.padEnd(11)} ${sec.toFixed(0).padStart(4)} s  ${shown.slice(0, 150)}`); continue; } // a tool this machine lacks: not a pass
+    const pass = r.status === 0; ran++; if (kind !== 'info') gradedRan++; if (!pass && kind !== 'info') failed++;
+    fs.writeFileSync(path.join(OUT, name + '.log'), out); rows.push([name, kind === 'info' ? (pass ? 'info' : 'info (exit ' + r.status + ')') : pass ? 'PASS' : 'FAIL', sec, shown.slice(0, 150)]);
+    console.log(`${(kind === 'info' ? '·' : pass ? '✓' : '✗')} ${name.padEnd(11)} ${sec.toFixed(0).padStart(4)} s  ${shown.slice(0, 150)}`);
+    if (name === 'build' && !pass) break; }
+  if (server) server.kill();
+  const msg = failed ? failed + ' graded step(s) FAILED' : !ran ? 'no step ran (all skipped or filtered out) — nothing was verified' : !gradedRan ? 'only info steps ran — nothing was graded' : skipped ? `${ran} step(s) ran and pass; ${skipped} skipped — this is NOT a full pass` : 'all graded steps pass';
+  console.log(`\n${msg} · logs and screenshots in ${OUT}`); process.exit(failed ? 1 : ran ? 0 : 2); })();

@@ -1,0 +1,15 @@
+{
+  "name": "forge",
+  "version": "9.3.0",
+  "private": true,
+  "description": "FORGE generative two-deck engine: dev tooling for the build, the tests and the verification (the app itself has no dependencies)",
+  "scripts": {
+    "build": "node tools/build.cjs",
+    "ci": "node tools/ci.cjs",
+    "gate": "node tools/ci.cjs --gate"
+  },
+  "devDependencies": {
+    "acorn": "8.16.0",
+    "playwright": "1.56.0"
+  }
+}

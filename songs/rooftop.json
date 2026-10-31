@@ -1,0 +1,26 @@
+{
+ "forge": 1,
+ "title": "Rooftop",
+ "genre": "ukg",
+ "seed": 2002,
+ "bpm": 134, "key": "G", "mode": "dorian", "swing": 64,
+ "notes": "2-step: skipping kick on a 2-bar loop, swung ghost hats, minor-seventh changes, sub bass that answers the kick.",
+ "harmony": { "progression": ["i7", "IV7", "bVIImaj7", "v7"], "barsPerChord": 2, "extension": "7" },
+ "drums": {
+  "patterns": {
+   "A": { "kick": "X.........X.....", "snare": "....X.......X...", "closed": "x.xgx.xgx.xgx.xg",
+          "perc": [ { "kind": "rim", "steps": "..........x..x.." } ] },
+   "B": { "kick": "X.........X.....|X......x..X...x.", "snare": "....X.......X...", "closed": "x.xgx.xgx.xgx.xg", "open": "..x...........x.", "shaker": "gxgxgxgxgxgxgxgx" }
+  }
+ },
+ "bass": { "patterns": { "A": "R.....R...R.R...", "B": "R.....R..r..R...|R.....R...o.R.A." }, "gate": 0.75 },
+ "form": [
+  { "section": "intro",  "bars": 16, "drums": "A", "bass": "A" },
+  { "section": "groove", "bars": 16, "drums": "A", "bass": "A" },
+  { "section": "break",  "bars": 8 },
+  { "section": "build",  "bars": 8 },
+  { "section": "drop",   "bars": 32, "drums": ["A", "B"], "bass": ["A", "B"] },
+  { "section": "groove", "bars": 16, "layer": "groove2", "drums": "B", "bass": "B" },
+  { "section": "outro",  "bars": 16, "drums": "A", "bass": "A" }
+ ]
+}

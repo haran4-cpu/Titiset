@@ -1,0 +1,67 @@
+<title>FORGE Decks · v__FORGE_VERSION__</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<script>document.addEventListener('DOMContentLoaded', function () { var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'https://fonts.googleapis.com/css2?family=Azeret+Mono:wght@400;500;600&family=Barlow:wght@400;500;600;700&family=Big+Shoulders+Display:wght@700;800&display=swap'; document.head.appendChild(l); });</script>
+<style>/*__CSS__*/</style>
+</head><body>
+<div class="app">
+  <header class="top">
+    <div class="brand">FORGE <small>generative decks · 33 genres · sample-accurate</small></div>
+    <button class="power" id="power">Start audio</button>
+    <button class="power" id="ctlBtn" title="Connect a MIDI controller, learn mappings, clock and note out">Controller</button>
+    <div class="tele" aria-live="off">
+      <div><span class="k">Lead BPM</span><span class="v" id="tBpm">—</span></div>
+      <div><span class="k">LUFS M / S</span><span class="v" id="tLufs">—</span></div>
+      <canvas class="lufs" id="lufs" height="26" aria-label="Loudness meter, yellow mark = genre target"></canvas>
+      <div><span class="k">True peak</span><span class="v" id="tTp">—</span></div>
+      <div><span class="k">Limiter</span><span class="v" id="tGr">—</span></div>
+      <div><span class="k">Corr</span><span class="v" id="tCorr">—</span></div>
+      <div><span class="k">Output latency</span><span class="v" id="tLat">—</span></div>
+      <div><span class="k">DSP load</span><span class="v" id="tLoad">—</span></div>
+      <div><span class="k">Engine</span><span class="v" id="engine">idle</span><select id="engPref" class="btn" aria-label="Audio engine" title="Live: computed on the browser's real-time audio thread — other programs cannot starve it (~70 ms to the controls). Live · safe: the same with the biggest output buffer the browser gives (steadier audio, noticeably more delay to the controls — the header shows the output latency) — for a busy or weak machine, or when the audio glitches (an external MIDI clock-in is followed more loosely on it); the default for a set (and suggested after a glitchy session). Live · fast: the smallest buffer (~30 ms), for a strong machine. Buffered: computed ahead in a worker thread (can be starved on a busy machine)."><option value="live">Live</option><option value="safe">Live · safe</option><option value="fast">Live · fast</option><option value="buffered">Buffered</option></select></div>
+      <div><span class="k">Health</span><button id="reportBtn" class="btn" disabled title="Save a diagnostic report of this session (glitches, load, latency, machine, and a timeline of what was played) — send it to get any glitch analysed">Report</button></div>
+      <div><span class="k">Output</span><select id="outLevel" class="btn" aria-label="Output level" title="How loud the master is: Club = on each genre's own loudness target, Balanced = 2 dB below (the limiter works less: more punch, less fatigue), Home = 4 dB below"><option value="0">Club</option><option value="-2">Balanced</option><option value="-4">Home</option></select></div>
+    </div>
+  </header>
+  <main class="console">
+    <aside class="mixer" aria-label="Mixer">
+      <h3>Mixer</h3>
+      <div class="chans"></div>
+      <label class="lbl" for="xf">Crossfader</label>
+      <input type="range" id="xf" class="xf" min="-1" max="1" step="0.01" value="0">
+      <div class="auto"><label class="row"><input type="checkbox" id="autoOn"> <span>Auto-DJ</span></label>
+        <label class="lbl" for="journey">Journey</label><select id="journey" class="btn" title="Flow: a genre plays two to four tracks, then the set moves to a neighbouring style along an energy arc around where it started; its home style pulls it back, no A → B → A, tempo moves a glide can reach. Same family: only styles of this family. Same genre: one genre."><option value="flow">Flow (energy arc, neighbouring styles)</option><option value="family">Same family</option><option value="stay">Same genre</option></select></div>
+      <div class="txbar"><i id="txbar"></i></div>
+      <div class="note" id="txinfo"></div><button class="btn" id="txCancel" hidden title="Call the mix off: the outgoing track comes back to full, the incoming deck stops (Shift+Esc)">Cancel mix</button>
+      <div class="mixbtns">
+        <label class="lbl" for="txKind">Transition</label>
+        <select id="txKind" class="btn"><option value="auto">Auto (varied)</option><option value="blend">Blend + bass swap</option><option value="filter">Filter blend</option><option value="echo">Echo out</option><option value="stems">Stem handover</option><option value="breakdown">Breakdown overlay</option><option value="tease">Tease</option><option value="cut">Drop swap</option><option value="roll">Loop-roll out</option><option value="brake">Brake out</option><option value="riser">Riser bridge</option></select>
+        <label class="lbl" for="txLen">Length</label>
+        <select id="txLen" class="btn"><option value="16">16 bars</option><option value="32" selected>32 bars</option></select>
+      </div>
+    </aside>
+  </main>
+  <section class="lib" aria-label="Genre library">
+    <div class="libhead"><h3>Library</h3><div class="fams"></div>
+</div>
+    <div class="tiles"></div>
+  </section>
+</div>
+<div class="toast" id="toast" role="status"></div>
+<div class="keys-help" id="keysHelp" hidden><div class="mp-card"><div class="mp-head"><h3>Keys</h3></div>
+  <dl><dt>Space</dt><dd>play / pause the lead deck</dd><dt>M</dt><dd>mix the other deck in on the next phrase</dd><dt>1–9</dt><dd>jump to section (on the next 4-bar line while playing)</dd><dt>L</dt><dd>loop 8 bars on / off</dd>
+  <dt>R</dt><dd>new variation</dd><dt>D · B · C · N</dt><dd>new drums · bass · chords · melody (only that part, next 4-bar line)</dd><dt>E</dt><dd>Evolve on / off</dd><dt>[ ]</dt><dd>energy down / up</dd>
+  <dt>Shift + 1–6</dt><dd>FX rack: sweep · phaser · flanger · echo · crush · gate</dd><dt>F1–F4</dt><dd>hot cue 1–4: set (empty) / jump on the next bar · Shift clears</dd><dt>P</dt><dd>Perform view (pads only)</dd><dt>/</dt><dd>Ask: describe a track or a change in words</dd><dt>Ctrl/⌘ Z</dt><dd>undo / redo (Shift) an edit</dd><dt>Esc</dt><dd>SAFE: all FX off, filters centred, loops released, Auto paused, an armed mix disarmed</dd><dt>Shift + Esc</dt><dd>cancel the mix (the outgoing track back to full)</dd><dt>?</dt><dd>this help</dd></dl></div></div>
+<div class="splash" id="splash">
+  <div class="card">
+    <h1>FORGE</h1>
+    <p>Two synthesized decks. Every track is composed from a genre contract — tempo, drum grammar, bass grammar, harmony, arrangement — and played by an audio-thread engine that times every hit to the sample. Mix by hand, or let Auto-DJ run an endless, phrase-aligned, key-compatible set.</p>
+    <p class="new"><b>New in 9.3</b> · real drum kits (808-, 909-, 707-, Linn-style, acoustic, lo-fi) with your own samples · chords that push and lag instead of always landing with the kick · Beat FX: delay, dub echo, reverb, filter, roll, brake and more, on the whole deck or one part · ten transition styles, Auto-DJ varies them · a phone-first layout: PLAY · MIX · FX · EDIT · SET.</p>
+    <div class="row"><label class="lbl" for="startGenre">Start with</label><select id="startGenre" class="btn"></select><label class="row"><input type="checkbox" id="startAuto" checked> <span>Auto-DJ</span></label></div>
+    <div class="row"><label class="lbl" for="startEngine">Playing for</label><select id="startEngine" class="btn" title="How the audio engine trades steadiness for delay to the controls. Gig: the biggest buffer the browser gives — the steadiest audio on any machine (the knobs answer about a quarter of a second later, more on some devices). Live: balanced (~70 ms). Studio: the smallest buffer (~30 ms) for a strong, quiet machine."><option value="safe">A gig — steadiest audio</option><option value="live">Live — balanced</option><option value="fast">Studio — fastest response</option></select></div>
+    <div class="row"><button class="btn big" id="go">Start the set</button><button class="btn" id="skip">Explore first</button></div>
+    <div class="row resume" id="resumeRow" hidden><button class="btn" id="resume">Resume the last set</button><span class="note" id="resumeInfo"></span></div>
+    <p class="ver" id="ver" title="the build id is a hash of the code this page was built from">v__FORGE_VERSION__ · build __FORGE_BUILD__</p>
+  </div>
+</div>
+<script>/*__JS__*/</script>
+</body></html>

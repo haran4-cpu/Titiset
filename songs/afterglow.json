@@ -1,0 +1,26 @@
+{
+ "forge": 1,
+ "title": "Afterglow",
+ "genre": "deep-house",
+ "mood": "emotional",
+ "seed": 77,
+ "bpm": 121, "key": "A", "mode": "minor",
+ "notes": "Emotional, not cliché: Am9 – Fmaj7 – Cmaj7 – G6 at two bars per chord, Rhodes + air pad, a soft lead that rises to B5 in bar 5 and settles home. Drums vary gently per section.",
+ "harmony": { "progression": ["i9", "bVImaj7", "bIIImaj7", "bVII6"], "barsPerChord": 2, "breakBarsPerChord": 4 },
+ "drums": { "vary": 0.6 },
+ "bass": { "vary": 0.3 },
+ "lead": { "role": "hook", "range": [62, 84] },
+ "sound": { "chords": { "preset": "rhodes" }, "pad": { "preset": "air-pad" }, "lead": { "preset": "soft-lead" } },
+ "form": [
+  { "section": "intro",  "bars": 16, "layer": "drums0" },
+  { "section": "intro",  "bars": 16 },
+  { "section": "groove", "bars": 32 },
+  { "section": "break",  "bars": 16,
+    "melody": "A4 - - - - - - - - - - - - - - - | . . . . . . . . . . . . . . . . | C5 - - - - - - - - - - - - - - - | . . . . . . . . . . . . . . . . | E5 - - - - - - - - - - - - - - - | D5 - - - - - - - . . . . . . . . | B4 - - - - - - - - - - - - - - - | . . . . . . . . . . . . . . . ." },
+  { "section": "build",  "bars": 4 },
+  { "section": "drop",   "bars": 32,
+    "melody": "E5 - - - . . C5 - D5 - E5 - G5 - - - | E5 - - - - - - - . . . . A4 - C5 - | C5 - - - . . A4 - C5 - E5 - F5 - - - | E5 - - - - - - - . . . . C5 - D5 - | E5 - - - . . G5 - B5 - - - A5 - G5 - | G5 - - - - - - - E5 - - - D5 - - - | D5 - - - . . B4 - D5 - E5 - G5 - - - | E5 - - - - - - - - - - - . . . ." },
+  { "section": "groove", "bars": 16, "layer": "groove2" },
+  { "section": "outro",  "bars": 16 }
+ ]
+}

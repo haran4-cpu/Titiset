@@ -1,0 +1,20 @@
+// no dead knobs: for every genre, every synth part that plays and every knob the editor shows for it (Sound tab list, the
+// Chords-tab stab/pad knobs; the cutoff becomes Tone on models with no filter of their own, filter knobs are hidden there),
+// a held chord rendered with the knob moved must differ audibly from the sound as written (> −35 dB). Drum kits: the knobs of
+// the kit's kind (snare / clap / rim). Usage: node tools/knob_test.cjs
+const { load } = require('./load.cjs'); const X = load();
+const TONE = ['sub', 'b808', 'organ', 'piano', 'ep', 'bell', 'kspluck', 'vox'];
+const SYN = { width: [0, 1], cut: [80, 12000], res: [0, 0.9], envAmt: [0, 1], aAtk: [0.001, 2], aDec: [0.02, 3], aSus: [0, 1], aRel: [0.02, 3], drive: [1, 5], glide: [0, 0.3], gain: [0, 1.5], detune: [0, 1], tone: [0, 1] };
+const KNOBS = { bass: ['cut', 'res', 'envAmt', 'aDec', 'drive', 'glide', 'gain'], chords: ['cut', 'res', 'envAmt', 'aDec', 'aSus', 'aRel', 'gain'], pad: ['cut', 'res', 'aAtk', 'aSus', 'aRel', 'width', 'gain'], lead: ['cut', 'res', 'aAtk', 'aDec', 'aRel', 'detune', 'drive', 'gain'], arp: ['cut', 'res', 'aDec', 'gain'] };
+let fails = 0, n = 0; const dead = [];
+function render(kit, notes, dur, mono) { X.noiseSeed(3); const S = new X.Synth(44100, mono ? 1 : 8, !!mono); S.setKit(kit); if (mono) { S.trigger(0, notes[0], 0.9, dur); S.trigger(dur >> 1, notes[0] + 7, 0.9, dur, { slide: true }); } else for (const nt of notes) S.trigger(0, nt, 0.9, dur); const L = new Float32Array(128), R = new Float32Array(128), NB = Math.ceil((dur + 44100 * 0.8) / 128), o = new Float32Array(NB * 256); for (let b = 0; b < NB; b++) { L.fill(0); R.fill(0); S.render(L, R, 128); o.set(L, b * 256); o.set(R, b * 256 + 128); } return o; }
+for (const G of X.GENRES) { const s = X.composeTrack(G.id, 1), used = new Set(); for (let k = 0; k < s.ev.n; k++) used.add(s.ev.ch[k]);
+  for (const [slot, ch] of [['bass', 4], ['chords', 5], ['pad', 6], ['lead', 7], ['arp', 8]]) { const kit = slot === 'arp' ? s.kits.hook || s.kits.arp : s.kits[slot]; if (!kit || !used.has(ch)) continue;
+    const base = Object.assign({}, kit), tm = TONE.includes(kit.model), notes = slot === 'bass' ? [36] : slot === 'lead' || slot === 'arp' ? [69] : [57, 60, 64, 67], held = slot === 'pad' || (slot === 'chords' && s.roles.chords === 'pad') || (kit.aAtk || 0) > 0.3, dur = Math.round(44100 * (held ? Math.max(3, (kit.aAtk || 0) * 3.5 + 1) : 0.4)), mono = slot === 'bass' || (slot === 'lead' && s.roles.lead !== 'chop');
+    const ref = render(base, notes, dur, mono); let e = 0; for (const x of ref) e += x * x; if (e < 1e-9) continue;
+    const hidden = X.MODEL_DEAD[kit.model] || [];
+    for (let k of (slot === 'chords' && s.roles.chords === 'pad' ? KNOBS.pad : KNOBS[slot])) { if (tm && k === 'cut') k = 'tone'; if (hidden.includes(k)) continue; const ctxK = k === 'aDec' ? { aSus: Math.min(base.aSus != null ? base.aSus : 0.8, 0.5) } : {}; const [mn, mx] = SYN[k]; const cur = kit[k] != null ? kit[k] : ({ cut: 2000, res: 0.2, envAmt: 0, aDec: 0.3, aRel: 0.15, drive: 1, gain: 1, detune: 0.2, tone: 1 })[k];
+      const to = Math.abs(cur - mn) > Math.abs(cur - mx) ? mn + (mx - mn) * 0.05 : mx - (mx - mn) * 0.05; const r0 = Object.keys(ctxK).length ? render(Object.assign({}, base, ctxK), notes, dur, mono) : ref, o = render(Object.assign({}, base, ctxK, { [k]: k === 'tone' ? 0.25 : to }), notes, dur, mono);
+      let d = 0; for (let i = 0; i < o.length; i++) d += (o[i] - r0[i]) ** 2; const db = 10 * Math.log10(d / e + 1e-30); n++; if (db < -35) { fails++; dead.push(`${G.id} ${slot} (${kit.model}) ${k} ${db.toFixed(0)} dB`); } } } }
+const kinds = {}; for (const G of X.GENRES) { const k = X.composeTrack(G.id, 1).kits.snare; kinds[(k && k.kind) || 'snare'] = 1; }
+console.log(dead.length ? 'dead knobs:\n  ' + dead.join('\n  ') : ''); console.log(`knobs: ${n - fails}/${n} act on the sound (snare kits in use: ${Object.keys(kinds).join(', ')})`); process.exit(fails ? 1 : 0);

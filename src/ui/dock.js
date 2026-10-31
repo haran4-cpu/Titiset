@@ -1,0 +1,495 @@
+/* ===================== FORGE · DOCK (bottom editor) =====================
+   One source of truth per deck: D.spec, a FORGE score (the same JSON an AI model writes). Every edit in the dock
+   changes the spec, the spec is validated, compiled and swapped into the running deck on the next bar (harmony on the
+   next 4-bar line). Sound and FX edits go to the engine instantly (no re-compose) and are written into the spec too,
+   so what you hear is always exactly what "Copy score" gives you. */
+const DOCK = { deck: 0, tab: 'drums', page: 'pattern', open: true, secPin: -1, dpat: null, bpat: null, dpage: 0, bpage: 0, slot: 'chords', lastSec: -2, lastStep: -1, scoreDirty: false, melDirty: false };
+const DOCK_TABS = [['drums', 'Drums'], ['bass', 'Bass'], ['chords', 'Chords'], ['lead', 'Lead'], ['harmony', 'Harmony'], ['score', 'Score']];
+// (v9.3) one part at a time, three pages each: Pattern (what it plays), Sound (how it sounds — only this part's sounds), Mix (its
+// level and sends). The 9.2 global Sound tab (every sound of every part, again) and FX tab (now the FX screen) are gone.
+const DOCK_PAGES = [['pattern', 'Pattern'], ['sound', 'Sound'], ['mix', 'Mix']], PART_SLOTS = { drums: ['kick', 'snare', 'hats', 'perc'], bass: ['bass'], chords: ['chords', 'pad'], lead: ['lead', 'arp'] };
+const SLOT_CH = { kick: 0, snare: 1, hats: 2, perc: 3, bass: 4, chords: 5, pad: 6, lead: 7, arp: 8 };
+const KIT_FAMS = [['', 'Genre'], ['808', '808-style'], ['909', '909-style'], ['707', '707-style'], ['linn', 'Linn-style'], ['acoustic', 'Acoustic'], ['lofi', 'Lo-fi tape'], ['forge', 'Synth (9.2)']];
+const BANK_KNOBS = [['tune', 'Tune', -12, 12, 'lin', 'st'], ['decay', 'Decay', 0.05, 1], ['tone', 'Tone', -1, 1], ['snap', 'Snap', 0, 1]];
+const LANE_ORDER = ['kick', 'snare', 'rim', 'clap', 'closed', 'open', 'ride', 'shaker'].filter((l) => SPEC_LANES[l]);
+const HAT_LANES = new Set(['closed', 'open', 'ride', 'shaker']);
+const PERC_ADD = ['conga', 'bongo', 'tom', 'cowbell', 'clave', 'wood', 'tamb', 'timbale', 'tick', 'agogo', 'guiro', 'triangle', 'djembe', 'taiko', 'maraca', 'cajon', 'rim'];
+// every voice a lane can take (the menu on a lane's name): the core lanes, then the percussion kinds of 02_drums.js
+const SWAP_CORE = [['kick', 'Kick'], ['snare', 'Snare'], ['rim', 'Rim'], ['closed', 'Closed hat'], ['open', 'Open hat'], ['ride', 'Ride'], ['shaker', 'Shaker']];
+const SWAP_PERC = [['tom', 'Tom'], ['conga', 'Conga'], ['bongo', 'Bongo'], ['cowbell', 'Cowbell'], ['clave', 'Clave'], ['wood', 'Woodblock'], ['tamb', 'Tambourine'], ['timbale', 'Timbale'], ['tick', 'Tick'], ['agogo', 'Agogo'], ['guiro', 'Guiro'], ['triangle', 'Triangle'], ['djembe', 'Djembe'], ['taiko', 'Taiko'], ['maraca', 'Maraca'], ['cajon', 'Cajon']];
+const BASS_CYCLE = ['.', 'R', 'O', 'F', 'T', 'S', 'A', 'N', 'P', '-'];
+const BASS_HELP = { R: 'root', O: 'octave up', F: 'fifth', T: 'third', S: 'seventh', A: 'approach — a step into the next chord', N: 'next chord’s root', P: 'passing tone', '-': 'hold', '.': 'rest' };
+const SYN_MODELS = Object.keys(MODEL);
+// knob tables: [param, label, min, max, curve, unit]
+const P_SYN = [['cut', 'Cutoff', 80, 12000, 'log', 'Hz'], ['res', 'Reso', 0, 0.9], ['envAmt', 'Env amt', 0, 1], ['fDec', 'Env decay', 0.01, 1.5, 'log', 's'], ['aAtk', 'Attack', 0.001, 2, 'log', 's'], ['aDec', 'Decay', 0.02, 3, 'log', 's'],
+  ['aSus', 'Sustain', 0, 1], ['aRel', 'Release', 0.02, 3, 'log', 's'], ['detune', 'Detune', 0, 1], ['drive', 'Drive', 1, 5], ['glide', 'Glide', 0, 0.3, 'lin', 's'], ['width', 'Width', 0, 1], ['gain', 'Level', 0, 1.5],
+  ['lfoSync', 'LFO beats', 0.25, 16, 'log', 'beat'], ['lfoDepth', 'LFO→Filter', 0, 1], ['lfoAmp', 'LFO→Volume', 0, 1]];
+const P_BASS = ['cut', 'res', 'envAmt', 'aDec', 'drive', 'glide', 'gain'], P_LEAD = ['cut', 'res', 'aAtk', 'aDec', 'aRel', 'detune', 'drive', 'gain'];
+const P_DRUM = {
+  kick: [['fEnd', 'Tune', 35, 80, 'lin', 'Hz'], ['len', 'Length', 0.15, 1.2, 'lin', 'beat'], ['punch', 'Punch', 0, 1], ['click', 'Click', 0, 1], ['drive', 'Drive', 1, 4], ['rumble', 'Rumble', 0, 1], ['gain', 'Level', 0, 1.5]],
+  snare: [['tone', 'Tune', 120, 320, 'lin', 'Hz'], ['nDec', 'Decay', 0.04, 0.5, 'log', 's'], ['snap', 'Snap', 0, 1], ['clapTail', 'Clap tail', 0.05, 0.5, 'log', 's'], ['layer', 'Layer', 0, 1], ['gain', 'Level', 0, 1.5]],
+  hats: [['cDec', 'Closed', 0.01, 0.15, 'log', 's'], ['oDec', 'Open', 0.08, 0.9, 'log', 's'], ['hpF', 'Tone', 4000, 11000, 'log', 'Hz'], ['base', 'Metal', 300, 620, 'lin', 'Hz'], ['gain', 'Level', 0, 1.5]],
+  perc: [['pitch', 'Tune', 0.5, 2, 'log', '×'], ['dec', 'Decay', 0.3, 2.5, 'log', '×'], ['noise', 'Noise', 0, 2, 'lin', '×'], ['gain', 'Level', 0, 1.5]] };
+const P_CLAP = [['clapF', 'Clap tone', 600, 2500, 'log', 'Hz'], ['clapTail', 'Clap tail', 0.05, 0.5, 'log', 's'], ['clapGap', 'Clap spread', 0.005, 0.02, 'log', 's']], P_RIM = [['rimF', 'Rim tone', 900, 3000, 'log', 'Hz']];
+function snareKinds() { const D = decks[DOCK.deck], ev = D.score.ev, kk = kitVal('snare', 'kind') || 'snare', u = {}; for (let i = 0; i < ev.n; i++) if (ev.ch[i] === 1) u[['snare', 'clap', 'rim'][ev.a[i] | 0] || kk] = 1; if (!Object.keys(u).length) u[kk] = 1; return u; }
+const DRUM_DEF = { kick: new Kick(44100).p, snare: new Snare(44100).p, hats: new Hats(44100).p, perc: new Perc(44100).p };
+const FX_RACK = [['sweep', 'Sweep', 'LFO filter: depth + speed'], ['phaser', 'Phaser', '4-stage, swept over 4 beats'], ['flanger', 'Flanger', 'jet sweep over 8 beats'], ['echo', 'Echo', '3/16 ping-pong, darkening repeats'], ['crush', 'Crush', 'bits + sample rate'], ['gate', 'Gate', '1/16 trance gate on the grid'], ['repeat', 'Repeat', 'beat repeat: the last 1/16 re-triggered on the grid'], ['tape', 'Tape stop', 'the deck slows to a halt — release and it is back on time'], ['swirl', 'Swirl', 'frequency shifter with feedback: the psychedelic barber pole']];
+const FX_RACK_DEF = [0.6, 0.6, 0.6, 0.5, 0.5, 0.8, 0.5, 0.5, 0.5], fxSetters = [[], []];
+const FX_PADS = [['Riser 1', 0, 16], ['Riser 4', 0, 64], ['Sweep', 3, 16], ['Downlifter', 2, 32], ['Impact', 1, 32], ['Snare roll', 4, 16], ['Zap', 7, 2.5, 0], ['Laser', 12, 2, 1], ['Squelch', 11, 2.5, 2], ['Bubbles', 9, 4, 3], ['Swirl', 10, 16, 5]]; // the last five: ear candy in key (perform.js earCandy)
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const clean = (x) => String(x).replace(/\s|\|/g, '');
+const groupBars = (s) => (s.length > 16 ? s.match(/.{16}/g).join('|') : s);
+
+// ---------------------------------------------------------------- spec ⇄ deck
+function deckSpec(score) { // the editable spec of a score: complete (every pattern written out), melodies only where authored
+  const sp = exportSpec(score, { melody: false }), o = score.spec;
+  if (o) { if (o.form) o.form.forEach((f, k) => { if (f && f.melody && sp.form[k]) sp.form[k].melody = f.melody; }); if (o.notes) sp.notes = o.notes; if (o.title) sp.title = o.title; if (o.mood) sp.mood = o.mood; } // mood stays as the label of what was asked for (the written harmony it chose still plays)
+  return sp; }
+function installScore(i, s, opt) { // a freshly composed / compiled score becomes the deck's track (loaded, not swapped)
+  opt = opt || {}; const D = decks[i], other = decks[i ^ 1], otherLive = other.playing && other.score;
+  D.score = s; D.gid = s.meta.gid; D.native = s.meta.bpm; D.groove = null; D.partMix = null; D.loop = 0; /* (v9.3: a new track starts with the engine's groove and part levels: as written) */ D.pendJump = -1; D.pos = 0; D.ended = false; D.fresh = true; D.spec = deckSpec(s); D.val = null; D.lint = lintScore(s);
+  const { msg, transfer } = packScore(s); const bpm = otherLive ? other.bpm : 0, play = !!opt.play && !otherLive;
+  send({ type: 'load', deck: i, score: msg, cal: cal(s.meta.gid), play, bpm: bpm || undefined, from: 0 }, transfer);
+  D.bpm = bpm || s.meta.bpm; D.loading = null; // (v9.2) the tempo it will play at, at once (the box showed the last track's tempo until the analysis, 5–9 s later)
+  D.mute.fill(false); D.trim = null; D.trimNA = false; renderDeckHead(i); renderStems(i); analyse(i, s); if (s.levelPending) refineInWorker(i, s); // palette levels: exact match from the worker
+  if (play) toast(`${s.meta.name} — ${PCN[s.meta.key]} ${s.meta.mode}, ${s.meta.bpm} BPM`); else if (otherLive) toast(`${s.meta.name} cued on deck ${'AB'[i]} — synced to ${other.bpm.toFixed(1)} BPM`);
+  DOCK.deck = i; DOCK.dpat = DOCK.bpat = null; DOCK.dpage = DOCK.bpage = 0; DOCK.secPin = -1; DOCK.scoreDirty = false; DOCK.melDirty = false; renderDock(); return s; }
+// validate → compile → swap on the next bar (q bars). Returns the new score or null (errors shown in the dock).
+let commitT = [0, 0];
+function commitSoon(i, q, ms) { clearTimeout(commitT[i]); commitT[i] = setTimeout(() => commitSpec(i, { q }), ms == null ? 140 : ms); }
+// The compile runs on the composer thread (the page never freezes); the swap point is chosen when the score is ready. Only the
+// newest edit of a deck is applied (a burst of edits compiles to one swap). Resolves to the new score, or null.
+async function commitSpec(i, opt) { opt = opt || {}; const D = decks[i]; if (!D.spec || !D.score) return null;
+  const v = validateSpec(D.spec); D.val = v; if (!v.ok) { dockStatus(); return null; }
+  const tk = D.cseq = (D.cseq || 0) + 1, spec = JSON.parse(JSON.stringify(D.spec)); dockStatus('composing…');
+  let s; try { s = await compileAsync(spec, { fastLevels: true }); } catch (e) { if (D.cseq === tk) { D.val = { ok: false, errors: [{ path: '', msg: e.message }], warnings: [] }; dockStatus(); } return null; }
+  if (D.cseq !== tk || !D.score) return null; // a newer edit is on its way // palette sounds: table level now, exact level from the worker a moment later (no UI stall)
+  D.lint = lintScore(s); const prev = D.score;
+  if (s.meta.bpm !== prev.meta.bpm) { send({ type: D.playing ? 'glide' : 'bpm', deck: i, bpm: s.meta.bpm, bars: 4 }); D.native = s.meta.bpm; }
+  const q = opt.q || 1, at = D.playing ? nextPhrase(D.score, schedPos(D) + 2, q) : 0; // (v9.2: the q-bar lines of the track's own sections)
+  D.score = s; const { msg, transfer } = packScore(s); send({ type: 'swapScore', deck: i, score: msg, atStep: at }, transfer); D.swapAt = at;
+  analyse(i, s); if (s.levelPending) refineInWorker(i, s); renderDeckHead(i); requestAnimationFrame(() => renderStems(i)); dockStatus(D.playing ? `→ bar ${at / 16 + 1}` : 'applied'); return s; }
+function snap(D) { const j = JSON.stringify(D.spec); if (!D.undo) D.undo = []; if (D.undo[D.undo.length - 1] !== j) { D.undo.push(j); if (D.undo.length > 100) D.undo.shift(); } D.redo = []; }
+function undo(dir) { const i = DOCK.deck, D = decks[i]; const from = dir > 0 ? D.redo : D.undo, to = dir > 0 ? D.undo : D.redo; if (!D.spec || !from || !from.length) { toast(dir > 0 ? 'Nothing to redo' : 'Nothing to undo'); return; }
+  (to || (dir > 0 ? (D.undo = []) : (D.redo = []))).push(JSON.stringify(D.spec)); D.spec = JSON.parse(from.pop()); DOCK.scoreDirty = false; DOCK.melDirty = false;
+  commitSpec(i, { q: 1 }).then((s) => { if (s) { const K = s.kits; for (const sl of ['kick', 'snare', 'hats', 'bass', 'chords', 'pad', 'lead', 'arp']) { const k = sl === 'arp' ? K.hook || K.arp : K[sl]; if (k) send({ type: 'kit', deck: i, slot: sl, p: k }); } } renderDock(); }); // sounds come back at once (the swap brings the rest on the bar)
+  toast(dir > 0 ? 'Redo' : 'Undo'); renderDock(); }
+function edit(fn, q, now) { const i = DOCK.deck, D = decks[i]; if (!D.spec) { toast('Load a track into this deck first'); return; } snap(D); fn(D.spec, D); DOCK.scoreDirty = false; if (now) commitSpec(i, { q }); else commitSoon(i, q); renderDock(); }
+let kitGesture = 0; addEventListener('pointerup', () => { kitGesture = 0; });
+function liveKit(slot, k, v) { const i = DOCK.deck, D = decks[i]; if (!D.spec) return; if (!kitGesture) { snap(D); kitGesture = 1; } send({ type: 'kit', deck: i, slot, p: { [k]: v } });
+  const S = D.spec.sound || (D.spec.sound = {}); (S[slot] || (S[slot] = {}))[k] = typeof v === 'number' ? +v.toPrecision(4) : v; DOCK.scoreDirty = false; }
+
+// ---------------------------------------------------------------- context: which section / bar the editor points at
+function focus() { const D = decks[DOCK.deck], s = D.score; if (!s) return null; const pos = livePos(D), liveBar = Math.min(s.meta.bars - 1, Math.floor(pos / 16));
+  const liveSec = Math.max(0, s.sections.findIndex((S) => liveBar >= S.bar0 && liveBar < S.bar0 + S.bars));
+  const si = DOCK.secPin >= 0 && DOCK.secPin < s.sections.length ? DOCK.secPin : liveSec, S = s.sections[si], bar = liveBar >= S.bar0 && liveBar < S.bar0 + S.bars ? liveBar : S.bar0;
+  return { D, s, si, S, bar, liveBar, step: pos - liveBar * 16, form: D.spec.form[si] }; }
+function kitVal(slot, k) { const D = decks[DOCK.deck], sp = D.spec.sound && D.spec.sound[slot]; if (sp && sp[k] != null) return sp[k];
+  const K = D.score.kits, kit = slot === 'arp' ? K.hook || K.arp : K[slot]; if (kit && kit[k] != null) return kit[k]; return DRUM_DEF[slot] ? DRUM_DEF[slot][k] : dflt()[k]; }
+function slotsOf(s) { const K = s.kits, out = ['kick', 'snare', 'hats']; if (K.perc) out.push('perc'); out.push('bass'); if (K.chords && s.roles.chords !== 'none') out.push('chords'); if (K.pad) out.push('pad'); if (K.lead) out.push('lead'); if (K.hook || K.arp) out.push('arp'); return out; }
+
+// ---------------------------------------------------------------- small controls
+function dknob(parent, o) { // o: label, min, max, curve, unit, value, def, onchange
+  const w = document.createElement('div'); w.className = 'dk-knob'; const c = document.createElement('canvas'); c.width = 72; c.height = 72; c.tabIndex = 0; c.setAttribute('role', 'slider'); c.setAttribute('aria-label', o.label);
+  const lg = o.curve === 'log', to = (v) => (lg ? Math.log(v / o.min) / Math.log(o.max / o.min) : (v - o.min) / (o.max - o.min)), from = (t) => (lg ? o.min * Math.pow(o.max / o.min, t) : o.min + t * (o.max - o.min));
+  let t = Math.max(0, Math.min(1, to(o.value))); const val = document.createElement('span'); val.className = 'dk-kv';
+  const fmt = (v) => (o.unit === 'Hz' ? (v >= 1000 ? (v / 1000).toFixed(1) + 'k' : Math.round(v)) : o.unit === 's' ? (v < 0.1 ? Math.round(v * 1000) + 'ms' : v.toFixed(2) + 's') : o.unit === 'beat' ? v.toFixed(2) + 'b' : v.toFixed(2));
+  const draw = () => { const g = c.getContext('2d'); g.clearRect(0, 0, 72, 72); const a0 = Math.PI * 0.75, a1 = Math.PI * 2.25, av = a0 + (a1 - a0) * t;
+    g.lineCap = 'round'; g.lineWidth = 6; g.strokeStyle = css('--line2'); g.beginPath(); g.arc(36, 36, 27, a0, a1); g.stroke();
+    g.strokeStyle = css(DOCK.deck ? '--b' : '--a'); g.beginPath(); g.arc(36, 36, 27, a0, av + 0.0001); g.stroke();
+    g.fillStyle = css('--panel2'); g.beginPath(); g.arc(36, 36, 18, 0, 7); g.fill(); g.strokeStyle = css('--text'); g.lineWidth = 3.5; g.beginPath(); g.moveTo(36 + Math.cos(av) * 6, 36 + Math.sin(av) * 6); g.lineTo(36 + Math.cos(av) * 16, 36 + Math.sin(av) * 16); g.stroke();
+    val.textContent = fmt(from(t)); c.setAttribute('aria-valuetext', fmt(from(t))); };
+  const set = (nt) => { t = Math.max(0, Math.min(1, nt)); draw(); o.onchange(from(t)); };
+  let y0 = 0, t0 = 0; c.addEventListener('pointerdown', (e) => { c.setPointerCapture(e.pointerId); y0 = e.clientY; t0 = t; });
+  c.addEventListener('pointermove', (e) => { if (c.hasPointerCapture(e.pointerId)) set(t0 + (y0 - e.clientY) / (e.shiftKey ? 600 : 160)); });
+  c.addEventListener('dblclick', () => { if (o.def != null) set(to(o.def)); });
+  c.addEventListener('keydown', (e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowRight') { e.preventDefault(); set(t + 0.025); } if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') { e.preventDefault(); set(t - 0.025); } });
+  const l = document.createElement('span'); l.className = 'dk-kl'; l.textContent = o.label; w.append(c, l, val); draw(); parent.appendChild(w); return w; }
+function knobRow(parent, slot, list) { const row = document.createElement('div'); row.className = 'dk-knobs'; parent.appendChild(row);
+  if (slot === 'snare') { const used = snareKinds(); list = [...(used.snare ? P_DRUM.snare.slice(0, 3) : []), ...(used.clap ? P_CLAP.slice(0, 3) : []), ...(used.rim ? P_RIM.slice(0, 1) : []), ['gain', 'Level', 0, 1.5]]; } // the knobs of what the track really hits on the snare channel (snare body / clap / rim — one score can use all three)
+  if (!P_DRUM[slot]) { const md = kitVal(slot, 'model'), dead = MODEL_DEAD[md] || []; // only the knobs this model uses (measured: tools/model_params.cjs); a model with no filter of its own gets Tone in place of Cutoff
+    list = list.map((p) => (p[0] === 'cut' && TONE_MODELS.includes(md) ? ['tone', 'Tone', 0, 1, 'lin', ''] : p)).filter((p) => !dead.includes(p[0])); }
+  for (const p of list) { let [k, label, mn, mx, curve, unit] = p; if (slot === 'kick' && k === 'len' && !(kitVal('kick', 'len') > 0)) { k = 'aDec'; label = 'Decay'; mn = 0.05; mx = 1; curve = 'log'; unit = 's'; }
+    const v = kitVal(slot, k); dknob(row, { label, min: mn, max: mx, curve, unit, value: v == null ? mn : v, def: v, onchange: (x) => liveKit(slot, k, x) }); } return row; }
+const TONE_MODELS = ['sub', 'b808', 'organ', 'piano', 'ep', 'bell', 'kspluck', 'vox'];
+const synParams = (keys) => keys.map((k) => P_SYN.find((p) => p[0] === k));
+function presetSelect(slot) { const bank = SOUND_BANK[slot]; if (!bank) return ''; const D = decks[DOCK.deck], cur = D.spec && D.spec.sound && D.spec.sound[slot] && D.spec.sound[slot].preset || '';
+  return `<label class="dk-field"><span class="lbl">Preset</span><select class="btn dk-preset" data-slot="${slot}" title="${esc(cur && bank[cur] ? bank[cur].d : 'The genre\'s own sound')}"><option value="">Genre sound</option>${Object.entries(bank).map(([k, p]) => `<option value="${k}"${k === cur ? ' selected' : ''} title="${esc(p.d)}">${esc(p.label)}</option>`).join('')}</select></label>`; }
+// a preset replaces the slot's sound in the score (level-matched to the genre's kit by the compiler) and is heard at once
+function wirePreset(body) { $$('.dk-preset', body).forEach((sel) => sel.onchange = () => { const slot = sel.dataset.slot, val = sel.value;
+  edit((s) => { if (!val) { if (s.sound) delete s.sound[slot]; } else (s.sound || (s.sound = {}))[slot] = { preset: val }; if (s.sound && !Object.keys(s.sound).length) delete s.sound; }, 1, true);
+  const sc = decks[DOCK.deck].score, k = slot === 'arp' ? sc.kits.hook || sc.kits.arp : sc.kits[slot]; if (k) send({ type: 'kit', deck: DOCK.deck, slot, p: k });
+  toast(val ? `${slot}: ${SOUND_BANK[slot][val].label} — ${SOUND_BANK[slot][val].d}` : `${slot}: back to the genre sound`); }); }
+function modelSelect(slot) { const cur = kitVal(slot, 'model') || 'saw'; return `<label class="dk-field"><span class="lbl">Model</span><select class="btn dk-model" data-slot="${slot}">${SYN_MODELS.map((m) => `<option${m === cur ? ' selected' : ''}>${m}</option>`).join('')}</select></label>`; }
+function seg(name, opts, cur, attr) { return `<div class="dk-seg" role="group" aria-label="${name}">${opts.map(([v, l]) => `<button class="${String(v) === String(cur) ? 'on' : ''}" ${attr}="${esc(v)}">${esc(l)}</button>`).join('')}</div>`; }
+
+// ---------------------------------------------------------------- build + render
+function buildDock() {
+  const el = document.createElement('section'); el.className = 'dock'; el.id = 'dock'; el.setAttribute('aria-label', 'Editor');
+  el.innerHTML = `<div class="dk-bar"><div class="dk-deck" role="group" aria-label="Deck to edit"><button data-dk="0">A</button><button data-dk="1">B</button></div>
+    <nav class="dk-tabs" role="tablist">${DOCK_TABS.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-label="${l} editor">${l}</button>`).join('')}</nav>
+    <div class="dk-pagesel seg" role="group" aria-label="Page">${DOCK_PAGES.map(([k, l]) => `<button data-page="${k}">${l}</button>`).join('')}</div>
+    <div class="dk-ctx"><select class="btn dk-sec" aria-label="Section to edit"></select><span class="dk-now"></span></div>
+    <span class="dk-status" aria-live="polite"></span><div class="dk-undo"><button data-undo="-1" title="Undo (Ctrl/⌘+Z)" aria-label="Undo">↶</button><button data-undo="1" title="Redo (Ctrl/⌘+Shift+Z)" aria-label="Redo">↷</button></div><button class="dk-fold" aria-label="Collapse editor">▾</button></div><div class="dk-body"></div>`;
+  document.body.appendChild(el);
+  // the page always scrolls clear of the fixed editor: its height becomes the page's bottom padding (measured: buttons in the
+  // lower part of a deck sat UNDER the dock and could not be clicked)
+  const pad = () => { document.body.style.paddingBottom = (el.offsetHeight + 12) + 'px'; }; try { new ResizeObserver(pad).observe(el); } catch (e) { setInterval(pad, 1000); } pad();
+  $$('[data-dk]', el).forEach((b) => b.onclick = () => { DOCK.deck = +b.dataset.dk; DOCK.dpat = DOCK.bpat = null; DOCK.secPin = -1; DOCK.scoreDirty = false; renderDock(); });
+  $$('[data-tab]', el).forEach((b) => b.onclick = () => { DOCK.tab = b.dataset.tab; DOCK.open = true; renderDock(); });
+  $$('[data-page]', el).forEach((b) => b.onclick = () => { DOCK.page = b.dataset.page; renderDock(); });
+  $('.dk-fold', el).onclick = () => { DOCK.open = !DOCK.open; renderDock(); };
+  $$('[data-undo]', el).forEach((b) => b.onclick = () => undo(+b.dataset.undo));
+  document.addEventListener('keydown', (e) => { if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'z' || /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return; e.preventDefault(); undo(e.shiftKey ? 1 : -1); });
+  $('.dk-sec', el).onchange = (e) => { DOCK.secPin = +e.target.value; DOCK.melDirty = false; renderDock(); };
+  try { const t = localStorage.getItem('forge.dockTab'); if (t && DOCK_TABS.some((x) => x[0] === t)) DOCK.tab = t; const o = localStorage.getItem('forge.dockOpen'); if (o === '0' || (o == null && !(matchMedia('(pointer: fine)').matches && window.innerWidth >= 1200 && window.innerHeight >= 1000))) DOCK.open = false; } /* (v9.2) open by default only on a big screen with a mouse: on tablets and phones, and at 1440×900, it covered the mixer */ catch (e) { /* storage blocked: defaults */ }
+  new ResizeObserver(() => document.documentElement.style.setProperty('--dockH', el.offsetHeight + 'px')).observe(el);
+  renderDock(); }
+function dockStatus(msg) { const D = decks[DOCK.deck], el = $('.dk-status'); if (!el) return; const v = D.val;
+  if (v && !v.ok) { el.className = 'dk-status bad'; el.textContent = `${v.errors.length} error${v.errors.length > 1 ? 's' : ''} — not applied`; el.title = v.errors.map((e) => `${e.path}: ${e.msg}`).join('\n'); }
+  else { el.className = 'dk-status' + (msg ? ' ok' : ''); el.textContent = msg || ''; el.title = ''; }
+  if (DOCK.tab === 'score') renderChecks(); }
+let dockBusy = false;
+function renderDock() { if (dockBusy) return; dockBusy = true; try { renderDock0(); } finally { dockBusy = false; } }
+// (v9.2) after a live edit the dock is redrawn in the next frame, not in the task that swaps the score: together they were one main-thread
+// task of 100 ms on a loaded machine (liveset_stress, 2 busy cores and the engine 3× slower), the screen's limit
+let dockSoon = 0; function renderDockSoon() { if (dockSoon) return; dockSoon = requestAnimationFrame(() => { dockSoon = 0; renderDock(); }); }
+function renderDock0() {
+  const el = $('#dock'); if (!el) return; const D = decks[DOCK.deck], f = focus();
+  try { localStorage.setItem('forge.dockTab', DOCK.tab); localStorage.setItem('forge.dockOpen', DOCK.open ? '1' : '0'); } catch (e) { /* ignore */ }
+  el.dataset.d = DOCK.deck; el.classList.toggle('folded', !DOCK.open); $('.dk-fold', el).textContent = DOCK.open ? '▾' : '▴'; $('.dk-fold', el).setAttribute('aria-label', DOCK.open ? 'Collapse editor' : 'Expand editor');
+  $$('[data-dk]', el).forEach((b) => b.classList.toggle('on', +b.dataset.dk === DOCK.deck));
+  $$('[data-tab]', el).forEach((b) => { b.classList.toggle('on', b.dataset.tab === DOCK.tab); b.setAttribute('aria-selected', b.dataset.tab === DOCK.tab); });
+  const part = !!PART_SLOTS[DOCK.tab]; if (!part) DOCK.page = 'pattern'; $$('[data-page]', el).forEach((b) => { b.classList.toggle('on', b.dataset.page === DOCK.page); b.disabled = !part && b.dataset.page !== 'pattern'; });
+  const sel = $('.dk-sec', el); sel.innerHTML = f ? `<option value="-1"${DOCK.secPin < 0 ? ' selected' : ''}>Follow playhead</option>` + f.s.sections.map((S, k) => `<option value="${k}"${DOCK.secPin === k ? ' selected' : ''}>${k + 1} · ${esc(S.name || S.type)} · bars ${S.bar0 + 1}–${S.bar0 + S.bars}</option>`).join('') : '<option>—</option>'; sel.disabled = !f;
+  DOCK.lastSec = f ? f.si : -2; dockStatus(); const body = $('.dk-body', el); if (!DOCK.open) { body.innerHTML = ''; return; }
+  if (!f) { body.innerHTML = `<div class="dk-empty">Deck ${'AB'[DOCK.deck]} is empty. Load a genre from the library, or open <b>Score</b> to load a written song or paste one.</div>`; if (DOCK.tab === 'score') renderScoreTab(body, null); return; }
+  if (DOCK.page === 'sound' && PART_SLOTS[DOCK.tab]) { renderSound(body, f, PART_SLOTS[DOCK.tab]); if (DOCK.tab === 'drums') renderKitFamily(body, f); return; }
+  if (DOCK.page === 'mix' && PART_SLOTS[DOCK.tab]) { renderPartMix(body, f, PART_SLOTS[DOCK.tab]); return; }
+  ({ drums: renderDrums, bass: renderBass, harmony: renderHarmony, chords: renderChords, lead: renderLead, score: renderScoreTab })[DOCK.tab](body, f);
+  // the Pattern page holds what the part plays: its sound lives on Sound, its level and sends on Mix (one home per control)
+  if (PART_SLOTS[DOCK.tab]) { $$('.dk-side, .dk-pgrid, .dk-padknobs, .dk-padh, [data-cnew], [data-newmel]', body).forEach((e) => e.remove()); /* (New chords / New melody: the deck's buttons, PLAY) */ const pad = $('[data-padon]', body); if (pad) pad.closest('.dk-tools').remove(); $$('.dk-split', body).forEach((e) => e.classList.add('solo')); }
+  if (DOCK.tab === 'drums') renderGroove(body, f);
+  if (DOCK.tab === 'harmony') { $$('.moods', body).forEach((e) => e.closest('.dk-tools').remove()); const bp = $('.dk-bpm', body); if (bp) { const lg = bp.nextElementSibling; if (lg && lg.classList.contains('dk-legend')) lg.remove(); if (bp.previousElementSibling) bp.previousElementSibling.remove(); bp.remove(); } } } // (mood and tempo live on the deck, PLAY)
+
+// ---------------------------------------------------------------- DRUMS
+function pageCtl(n, cur, kind) { return `<div class="dk-pages"><span class="lbl">Bar</span>${Array.from({ length: n }, (_, k) => `<button class="${k === cur ? 'on' : ''}" data-${kind}page="${k}">${k + 1}</button>`).join('')}${n < 4 ? `<button data-${kind}page="add" title="Make the pattern one bar longer (copies bar 1)">+</button>` : ''}${n > 1 ? `<button data-${kind}page="del" title="Remove the last bar">−</button>` : ''}</div>`; }
+// ---------------------------------------------------------------- drum lanes: their voices, and the swap
+// a lane plays one voice: a core lane (kick, snare, rim, closed, open, ride, shaker) or one percussion row (its kind). The
+// menu on a lane's name picks any voice. A voice another lane already plays trades places with it; the steps stay on their
+// row, so the rhythm is kept and only the sound moves.
+const VOICE_OPTS = [...SWAP_CORE, ...SWAP_PERC.map(([k, l]) => ['perc:' + k, l])];
+const voiceRows = (pat) => [...Object.keys(pat).filter((k) => k !== 'perc' && SPEC_LANES[k]).map((k) => ({ id: k, v: k, steps: pat[k] })), ...(pat.perc || []).map((p, i) => ({ id: 'p' + i, v: 'perc:' + p.kind, steps: p.steps, note: p.note }))];
+const fitSteps = (s, v) => (HAT_LANES.has(v) ? s : s.replace(/[rzq]/g, 'x')); // hat rolls (r z q) exist only on hat lanes
+function setVoiceRows(pat, rows) { for (const k of Object.keys(pat)) if (k === 'perc' || SPEC_LANES[k]) delete pat[k];
+  const perc = []; for (const r of rows) { const s = fitSteps(r.steps, r.v); if (r.v.startsWith('perc:')) perc.push(r.note ? { kind: r.v.slice(5), note: r.note, steps: s } : { kind: r.v.slice(5), steps: s }); else pat[r.v] = s; }
+  if (perc.length) pat.perc = perc; else delete pat.perc; }
+function swapVoice(pat, id, want) { const R = voiceRows(pat), a = R.find((r) => r.id === id); if (!a || a.v === want) return;
+  const b = R.find((r) => r !== a && r.v === want); if (b) b.v = a.v; a.v = want; setVoiceRows(pat, R); }
+function laneSwap(pat, id) { const R = voiceRows(pat), me = R.find((r) => r.id === id), cur = me ? me.v : '', taken = new Set(R.filter((r) => r !== me).map((r) => r.v));
+  const opts = VOICE_OPTS.slice(); if (cur && !opts.some(([v]) => v === cur)) opts.push([cur, cur.replace(/^perc:/, '')]);
+  return `<select class="btn dk-swap" data-swap="${esc(id)}" aria-label="Sound of this lane" title="The sound of this lane. A sound another lane plays trades places with it.">${opts.map(([v, l]) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(l)}${taken.has(v) ? ' ⇄' : ''}</option>`).join('')}</select>`; }
+function renderDrums(body, f) {
+  const sp = f.D.spec, P = sp.drums.patterns, names = Object.keys(P), playing = names[f.s.pat.drums[f.bar]] || names[0];
+  if (!DOCK.dpat || !P[DOCK.dpat]) DOCK.dpat = playing; const name = DOCK.dpat, pat = P[name];
+  const lanes = LANE_ORDER.filter((l) => pat[l] != null), perc = pat.perc || [];
+  const len = Math.max(16, ...lanes.map((l) => clean(pat[l]).length), ...perc.map((p) => clean(p.steps).length)), nb = len / 16; if (DOCK.dpage >= nb) DOCK.dpage = 0; DOCK.nb = nb; const pg = DOCK.dpage;
+  const assign = f.form && f.form.drums != null ? (Array.isArray(f.form.drums) ? f.form.drums.join(',') : f.form.drums) : '';
+  const row = (key, label, str, isHat, idx) => { const s = clean(str), bar = s.length > 16 ? s.slice((pg % (s.length / 16)) * 16, (pg % (s.length / 16)) * 16 + 16) : s;
+    return `<div class="dk-row" data-lane="${key}"${idx != null ? ` data-perc="${idx}"` : ''}>${laneSwap(pat, idx != null ? 'p' + idx : key)}<div class="dk-cells">${[...bar].map((c, k) => `<button class="dk-c c${c === '.' ? '0' : c}" data-s="${k}" aria-label="${esc(label)} step ${k + 1}: ${c === '.' ? 'off' : c}"></button>`).join('')}</div><button class="dk-x" title="Remove lane" aria-label="Remove ${esc(label)} lane">×</button></div>`; };
+  const missing = LANE_ORDER.filter((l) => pat[l] == null);
+  body.innerHTML = `<div class="dk-split"><div class="dk-main">
+    <div class="dk-tools"><div class="dk-chips" role="group" aria-label="Drum patterns">${names.map((n) => `<button class="dk-chip${n === name ? ' on' : ''}${n === playing ? ' live' : ''}" data-pat="${esc(n)}" title="${n === playing ? 'Playing now' : 'Edit pattern ' + esc(n)}">${esc(n)}</button>`).join('')}<button class="dk-chip add" data-patnew title="New pattern (copy of ${esc(name)})">+</button>${names.length > 1 ? `<button class="dk-chip" data-patdel title="Delete pattern ${esc(name)}">Delete</button>` : ''}</div>
+      <label class="dk-field"><span class="lbl">${esc(f.S.name || f.S.type)} plays</span><select class="btn" data-assign="drums"><option value="">Genre policy (${esc(playing)} now)</option>${names.map((n) => `<option value="${esc(n)}"${assign === n ? ' selected' : ''}>${esc(n)}</option>`).join('')}${names.length > 1 ? `<option value="${esc(names.join(','))}"${assign === names.join(',') ? ' selected' : ''}>${esc(names.join(' → '))} (8 bars each)</option>` : ''}</select></label>
+      ${pageCtl(nb, pg, 'd')}</div>
+    <div class="dk-grid">${lanes.map((l) => row(l, l, pat[l], HAT_LANES.has(l))).join('')}${perc.map((p, k) => row('perc', p.kind, p.steps, false, k)).join('')}
+      <div class="dk-row add"><span class="dk-ln"></span><select class="btn dk-addlane" aria-label="Add a lane"><option value="">+ lane</option>${missing.map((l) => `<option value="${l}">${l}</option>`).join('')}<optgroup label="percussion">${PERC_ADD.map((k) => `<option value="perc:${k}">${k}</option>`).join('')}</optgroup></select>
+      <span class="dk-legend"><i class="cX"></i>accent <i class="cx"></i>hit <i class="cg"></i>ghost${lanes.some((l) => HAT_LANES.has(l)) ? ' <i class="cr"></i>roll (hats)' : ''} · click cycles · right-click clears · a lane's name picks its sound</span></div></div>
+    <div class="dk-tools"><label class="dk-field"><span class="lbl">Swing</span><input type="range" min="50" max="75" step="1" value="${sp.swing}" data-swing aria-label="Swing"><b class="dk-sv">${sp.swing}%</b></label>
+      <label class="dk-field"><input type="checkbox" data-fill ${sp.drums.fill === false ? '' : 'checked'}><span>Fills at phrase ends</span></label></div></div>
+    <div class="dk-side"><h4>Kick</h4></div></div>`;
+  const side = $('.dk-side', body); side.insertAdjacentHTML('beforeend', presetSelect('kick')); knobRow(side, 'kick', P_DRUM.kick); side.insertAdjacentHTML('beforeend', '<h4>Snare / clap</h4>' + presetSelect('snare')); knobRow(side, 'snare', P_DRUM.snare); side.insertAdjacentHTML('beforeend', '<h4>Hats</h4>' + presetSelect('hats')); knobRow(side, 'hats', P_DRUM.hats); side.insertAdjacentHTML('beforeend', '<h4>Percussion</h4>' + presetSelect('perc')); knobRow(side, 'perc', P_DRUM.perc); wirePreset(side);
+  $$('[data-pat]', body).forEach((b) => b.onclick = () => { DOCK.dpat = b.dataset.pat; DOCK.dpage = 0; renderDock(); });
+  const pn = $('[data-patnew]', body); if (pn) pn.onclick = () => edit((s) => { let k = 0, nn; do nn = String.fromCharCode(65 + k++); while (s.drums.patterns[nn]); s.drums.patterns[nn] = JSON.parse(JSON.stringify(pat)); DOCK.dpat = nn; });
+  const pd = $('[data-patdel]', body); if (pd) pd.onclick = () => edit((s) => { delete s.drums.patterns[name]; for (const fm of s.form) if (fm.drums != null) { const l = (Array.isArray(fm.drums) ? fm.drums : [fm.drums]).filter((x) => x !== name); if (l.length) fm.drums = l.length === 1 ? l[0] : l; else delete fm.drums; } DOCK.dpat = null; });
+  $('[data-assign=drums]', body).onchange = (e) => edit((s) => { const v = e.target.value, fm = s.form[f.si]; if (!v) delete fm.drums; else fm.drums = v.includes(',') ? v.split(',') : v; });
+  $$('[data-dpage]', body).forEach((b) => b.onclick = () => { const v = b.dataset.dpage;
+    if (v === 'add' || v === 'del') edit(() => { const grow = (str) => { const s = clean(str); const L = s.length; if (v === 'add') return groupBars(s + s.slice(0, 16)); return L > 16 ? groupBars(s.slice(0, Math.max(16, (nb - 1) * 16))) : s; };
+      for (const l of lanes) pat[l] = grow(len > clean(pat[l]).length && v === 'add' ? clean(pat[l]).repeat(len / clean(pat[l]).length) : pat[l]); for (const p of perc) p.steps = grow(len > clean(p.steps).length && v === 'add' ? clean(p.steps).repeat(len / clean(p.steps).length) : p.steps); DOCK.dpage = v === 'add' ? nb : Math.min(pg, nb - 2); });
+    else { DOCK.dpage = +v; renderDock(); } });
+  const setStep = (rowEl, k, next) => edit(() => { const lane = rowEl.dataset.lane, pi = rowEl.dataset.perc; let s = clean(pi != null ? perc[+pi].steps : pat[lane]);
+    if (s.length < len) s = s.repeat(len / s.length); const at = (pg % (s.length / 16)) * 16 + k; const c = next(s[at], HAT_LANES.has(lane)); s = s.slice(0, at) + c + s.slice(at + 1);
+    if (pi != null) perc[+pi].steps = groupBars(s); else pat[lane] = groupBars(s); });
+  $$('.dk-row[data-lane] .dk-c', body).forEach((b) => { const r = b.closest('.dk-row'), k = +b.dataset.s;
+    b.onclick = () => setStep(r, k, (c, hat) => { const cyc = hat ? ['.', 'X', 'x', 'g', 'r'] : ['.', 'X', 'x', 'g']; const i = cyc.indexOf(c); return cyc[(i + 1) % cyc.length]; });
+    b.oncontextmenu = (e) => { e.preventDefault(); setStep(r, k, () => '.'); }; });
+  $$('.dk-row[data-lane] .dk-x', body).forEach((b) => b.onclick = () => { const r = b.closest('.dk-row'); edit(() => { if (r.dataset.perc != null) { perc.splice(+r.dataset.perc, 1); if (!perc.length) delete pat.perc; } else delete pat[r.dataset.lane]; }); });
+  $$('.dk-swap', body).forEach((sel) => sel.onchange = () => { const id = sel.dataset.swap, want = sel.value; DOCK.dpat = name; edit((s) => swapVoice(s.drums.patterns[name], id, want)); });
+  $('.dk-addlane', body).onchange = (e) => { const v = e.target.value; if (!v) return; edit(() => { const empty = groupBars('.'.repeat(len)); if (v.startsWith('perc:')) (pat.perc || (pat.perc = [])).push({ kind: v.slice(5), steps: empty }); else pat[v] = empty; }); };
+  const sw = $('[data-swing]', body); sw.oninput = () => { $('.dk-sv', body).textContent = sw.value + '%'; }; sw.onchange = () => edit((s) => { s.swing = +sw.value; });
+  $('[data-fill]', body).onchange = (e) => edit((s) => { if (e.target.checked) delete s.drums.fill; else s.drums.fill = false; if (e.target.checked && s.drums.fill === undefined) { const G = GENRE_BY_ID[s.genre]; if (G.drums.fill) s.drums.fill = G.drums.fill.slice(); } }); }
+
+// ---------------------------------------------------------------- BASS
+function renderBass(body, f) {
+  const sp = f.D.spec, P = sp.bass.patterns, names = Object.keys(P), playing = names[f.s.pat.bass[f.bar]] || names[0];
+  if (!DOCK.bpat || P[DOCK.bpat] == null) DOCK.bpat = playing; const name = DOCK.bpat, s = clean(P[name]), nb = s.length / 16; if (DOCK.bpage >= nb) DOCK.bpage = 0; DOCK.nb = nb; const pg = DOCK.bpage, bar = s.slice(pg * 16, pg * 16 + 16);
+  const assign = f.form && f.form.bass != null ? (Array.isArray(f.form.bass) ? f.form.bass.join(',') : f.form.bass) : '';
+  body.innerHTML = `<div class="dk-split"><div class="dk-main">
+    <div class="dk-tools"><div class="dk-chips">${names.map((n) => `<button class="dk-chip${n === name ? ' on' : ''}${n === playing ? ' live' : ''}" data-bp="${esc(n)}">${esc(n)}</button>`).join('')}<button class="dk-chip add" data-bpnew title="New bass line (copy of ${esc(name)})">+</button>${names.length > 1 ? '<button class="dk-chip" data-bpdel>Delete</button>' : ''}</div>
+      <label class="dk-field"><span class="lbl">${esc(f.S.name || f.S.type)} plays</span><select class="btn" data-assign="bass"><option value="">Genre policy (${esc(playing)} now)</option>${names.map((n) => `<option value="${esc(n)}"${assign === n ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></label>${pageCtl(nb, pg, 'b')}</div>
+    <div class="dk-grid bass"><div class="dk-row" data-lane="bass"><span class="dk-ln">notes</span><div class="dk-cells">${[...bar].map((c, k) => `<button class="dk-c tok t${c === '.' ? '0' : c === '-' ? 'h' : c.toUpperCase()}" data-s="${k}" title="${esc(BASS_HELP[c.toUpperCase()] || '')}">${c === '.' ? '' : c === '-' ? '–' : c.toUpperCase()}</button>`).join('')}</div><span></span></div>
+      <div class="dk-row" data-lane="slide"><span class="dk-ln">slide</span><div class="dk-cells">${[...bar].map((c, k) => `<button class="dk-c sl${/[a-z]/.test(c) ? ' on' : ''}" data-s="${k}" ${/[A-Za-z]/.test(c) ? '' : 'disabled'} aria-label="slide step ${k + 1}"></button>`).join('')}</div><span></span></div></div>
+    <p class="dk-legend">${['R', 'O', 'F', 'T', 'S', 'A', 'N', 'P', '-'].map((t) => `<b>${t === '-' ? '–' : t}</b> ${BASS_HELP[t]}`).join(' · ')} · notes follow the chords, so a line survives any key or progression change</p>
+    <div class="dk-tools"><label class="dk-field"><span class="lbl">Gate</span><input type="range" min="0.2" max="1" step="0.05" value="${sp.bass.gate}" data-gate aria-label="Bass note length"><b class="dk-gv">${(+sp.bass.gate).toFixed(2)}</b></label></div></div>
+    <div class="dk-side"><h4>Bass sound</h4>${presetSelect('bass')}${modelSelect('bass')}</div></div>`;
+  knobRow($('.dk-side', body), 'bass', synParams(P_BASS)); wireModel(body);
+  $$('[data-bp]', body).forEach((b) => b.onclick = () => { DOCK.bpat = b.dataset.bp; DOCK.bpage = 0; renderDock(); });
+  const bn = $('[data-bpnew]', body); if (bn) bn.onclick = () => edit((x) => { let k = 0, nn; do nn = String.fromCharCode(65 + k++); while (x.bass.patterns[nn] != null); x.bass.patterns[nn] = P[name]; DOCK.bpat = nn; });
+  const bd = $('[data-bpdel]', body); if (bd) bd.onclick = () => edit((x) => { delete x.bass.patterns[name]; for (const fm of x.form) if (fm.bass != null) { const l = (Array.isArray(fm.bass) ? fm.bass : [fm.bass]).filter((y) => y !== name); if (l.length) fm.bass = l.length === 1 ? l[0] : l; else delete fm.bass; } DOCK.bpat = null; });
+  $('[data-assign=bass]', body).onchange = (e) => edit((x) => { const v = e.target.value, fm = x.form[f.si]; if (!v) delete fm.bass; else fm.bass = v; });
+  $$('[data-bpage]', body).forEach((b) => b.onclick = () => { const v = b.dataset.bpage; if (v === 'add') edit((x) => { x.bass.patterns[name] = groupBars(s + s.slice(0, 16)); DOCK.bpage = nb; }); else if (v === 'del') edit((x) => { x.bass.patterns[name] = groupBars(s.slice(0, (nb - 1) * 16)); DOCK.bpage = 0; }); else { DOCK.bpage = +v; renderDock(); } });
+  const put = (k, fn) => edit((x) => { const at = pg * 16 + k; x.bass.patterns[name] = groupBars(s.slice(0, at) + fn(s[at]) + s.slice(at + 1)); });
+  $$('[data-lane=bass] .dk-c', body).forEach((b) => { const k = +b.dataset.s; b.onclick = () => put(k, (c) => { const up = c === '-' || c === '.' ? c : c.toUpperCase(), i = BASS_CYCLE.indexOf(up), n = BASS_CYCLE[(i + 1) % BASS_CYCLE.length]; return /[a-z]/.test(c) && /[A-Z]/.test(n) ? n.toLowerCase() : n; }); b.oncontextmenu = (e) => { e.preventDefault(); put(k, () => '.'); }; });
+  $$('[data-lane=slide] .dk-c', body).forEach((b) => b.onclick = () => put(+b.dataset.s, (c) => (/[a-z]/.test(c) ? c.toUpperCase() : c.toLowerCase())));
+  const g = $('[data-gate]', body); g.oninput = () => { $('.dk-gv', body).textContent = (+g.value).toFixed(2); }; g.onchange = () => edit((x) => { x.bass.gate = +g.value; }); }
+function wireModel(body) { wirePreset(body); $$('.dk-model', body).forEach((sel) => sel.onchange = () => { const slot = sel.dataset.slot; liveKit(slot, 'model', sel.value);
+  const k = specKits(decks[DOCK.deck].spec)[slot]; if (k) send({ type: 'kit', deck: DOCK.deck, slot, p: { gain: k.gain } }); // loudness-matched to the genre's kit right away
+  commitSoon(DOCK.deck, 1); toast(`${slot}: ${sel.value} — level matched to the genre's ${slot}`); }); }
+
+// ---------------------------------------------------------------- HARMONY
+const COMMON_PROGS = { minor: [['i', 'bVI', 'bIII', 'bVII'], ['i', 'iv', 'bVII', 'bIII'], ['i', 'bVII', 'bVI', 'bVII'], ['i', 'v', 'bVI', 'iv'], ['i', 'iv']], major: [['I', 'V', 'vi', 'IV'], ['vi', 'IV', 'I', 'V'], ['I', 'vi', 'IV', 'V'], ['ii7', 'V7', 'Imaj7', 'vi7'], ['IV', 'V', 'iii', 'vi']] };
+function transposeMelody(text, semis, names) { const p = parseMelody(text); if (p.errors.length) return text; for (const b of p.bars) for (const n of b) n.m += semis; return melodyToText(p.bars, names); }
+function renderHarmony(body, f) {
+  const sp = f.D.spec, G = GENRE_BY_ID[sp.genre], key = sp.key != null ? KEY_PC[sp.key] : f.s.meta.key, mode = sp.mode || f.s.meta.mode, names = spellFor(key, mode), minorish = ['minor', 'dorian', 'phrygian', 'harmonic', 'phrygdom'].includes(mode);
+  const secProg = f.form && f.form.progression, prog = (secProg || (sp.harmony && sp.harmony.progression) || f.s.meta.prog).join(' '), presets = [...G.harm.progs, ...COMMON_PROGS[minorish ? 'minor' : 'major']].filter((p, k, a) => a.findIndex((q) => q.join() === p.join()) === k).slice(0, 9);
+  const labels = []; let last = ''; for (let b = f.S.bar0; b < f.S.bar0 + f.S.bars; b++) { const c = f.s.chords[b]; if (c.label !== last || (b - f.S.bar0) % 4 === 0 && labels.length < 16) { labels.push([b, c.label]); last = c.label; } }
+  body.innerHTML = `<div class="dk-split"><div class="dk-main">
+    <div class="dk-tools"><span class="lbl">Mood</span><div class="moods">${[['', 'Genre'], ...Object.keys(MOODS).map((m) => [m, m[0].toUpperCase() + m.slice(1)])].map(([k, l]) => `<button class="${(sp.mood || '') === k ? 'on' : ''}" data-mood="${k}">${l}</button>`).join('')}</div></div>
+    <p class="dk-legend">Pick a feeling — the progression, mode and chord colour follow it; the key follows the mix (decks stay harmonically compatible). Applies on the next 4-bar line.</p>
+    <details class="adv"${DOCK.advOpen ? ' open' : ''}><summary>Advanced — key, mode, progression</summary>
+    <div class="dk-tools"><span class="lbl">Key</span><div class="dk-keys">${names.map((n, k) => `<button class="${k === key ? 'on' : ''}" data-key="${k}">${n}</button>`).join('')}</div></div>
+    <div class="dk-tools"><span class="lbl">Mode</span>${seg('Mode', Object.keys(MODES).map((m) => [m, (G.modes.includes(m) ? '★ ' : '') + m]), mode, 'data-mode')}</div>
+    <div class="dk-tools wrap"><label class="dk-field grow"><span class="lbl">Progression</span><input class="btn dk-prog" value="${esc(prog)}" spellcheck="false" aria-label="Progression in roman numerals"></label>
+      ${seg('Scope', [['all', 'Whole track'], ['sec', 'This section']], secProg ? 'sec' : 'all', 'data-scope')}</div>
+    <div class="dk-chips presets">${presets.map((p) => `<button class="dk-chip" data-preset="${esc(p.join(' '))}">${esc(p.join(' – '))}</button>`).join('')}</div>
+    <p class="dk-legend">Roman numerals: uppercase major, lowercase minor, <b>b</b>/<b>#</b> borrow, suffix 7 maj7 9 add9 sus2 sus4 dim. Applies on the next 4-bar line; bass, chords, pad, arp and generated melodies all follow.</p></details>
+    <div class="dk-chordstrip">${labels.map(([b, l]) => `<span class="${b === f.bar ? 'on' : ''}"><i>${b - f.S.bar0 + 1}</i>${esc(l)}</span>`).join('')}</div>${chordRhythmHtml(f)}</div>
+    <div class="dk-side"><h4>Rhythm of harmony</h4><span class="lbl">Bars per chord</span>${seg('Bars per chord', [1, 2, 4, 8].map((n) => [n, n]), (f.form && f.form.barsPerChord) || (sp.harmony && sp.harmony.barsPerChord) || f.s.contract.harm.hr, 'data-hr')}
+      <span class="lbl">Chord colour</span>${seg('Extension', ['triad', '7', '9', 'add9', 'sus2', 'power'].map((x) => [x, x]), (sp.harmony && sp.harmony.extension) || f.s.contract.harm.ext, 'data-ext')}
+      <span class="lbl">Tempo</span><div class="dk-bpm"><button data-bpm="-1">−</button><input class="btn" type="number" min="60" max="200" step="0.5" value="${sp.bpm}" aria-label="Tempo"><button data-bpm="1">+</button></div>
+      <span class="dk-legend">${G.name}: ${G.bpm[0]}–${G.bpm[1]} BPM. Tempo glides over 4 bars.</span></div></div>`;
+  $$('[data-mood]', body).forEach((b) => b.onclick = () => setMood(DOCK.deck, b.dataset.mood));
+  const adv = $('details.adv', body); if (adv) adv.ontoggle = () => { DOCK.advOpen = adv.open; };
+  $$('[data-key]', body).forEach((b) => b.onclick = () => edit((s) => { const nk = +b.dataset.key; let d = ((nk - key) % 12 + 12) % 12; if (d > 6) d -= 12; const nn = spellFor(nk, s.mode); s.key = nn[nk]; for (const fm of s.form) if (fm.melody) fm.melody = transposeMelody(fm.melody, d, nn); }, 4));
+  $$('[data-mode]', body).forEach((b) => b.onclick = () => edit((s) => { s.mode = b.dataset.mode; s.key = spellFor(key, s.mode)[key]; }, 4));
+  const applyProg = (txt) => { const toks = txt.trim().split(/[\s,–-]+/).filter(Boolean); const scope = $('[data-scope].on', body).dataset.scope;
+    edit((s) => { s.harmony = s.harmony || {}; if (scope === 'sec') s.form[f.si].progression = toks; else { s.harmony.progression = toks; } }, 4); };
+  const pi = $('.dk-prog', body); pi.onkeydown = (e) => { if (e.key === 'Enter') pi.blur(); }; pi.onchange = () => applyProg(pi.value); // Enter → blur → one change event (applying on both re-rendered the input away mid-blur)
+  $$('[data-preset]', body).forEach((b) => b.onclick = () => applyProg(b.dataset.preset));
+  $$('[data-scope]', body).forEach((b) => b.onclick = () => { if (b.dataset.scope === 'all' && f.form.progression) edit((s) => { delete s.form[f.si].progression; }, 4); else { $$('[data-scope]', body).forEach((x) => x.classList.toggle('on', x === b)); } });
+  $$('[data-hr]', body).forEach((b) => b.onclick = () => edit((s) => { s.harmony = s.harmony || {}; const v = +b.dataset.hr; if (s.form[f.si].progression) s.form[f.si].barsPerChord = v; else { s.harmony.barsPerChord = v; delete s.harmony.breakBarsPerChord; } }, 4));
+  $$('[data-ext]', body).forEach((b) => b.onclick = () => edit((s) => { s.harmony = s.harmony || {}; s.harmony.extension = b.dataset.ext; }, 4));
+  const bi = $('.dk-bpm input', body), setBpm = (v) => edit((s) => { s.bpm = Math.max(60, Math.min(200, Math.round(v * 2) / 2)); }, 1);
+  wireChordRhythm(body, f);
+  bi.onchange = () => setBpm(+bi.value); bi.onkeydown = (e) => { if (e.key === 'Enter') bi.blur(); }; $$('[data-bpm]', body).forEach((b) => b.onclick = () => setBpm(sp.bpm + +b.dataset.bpm)); }
+
+// chord rhythm (stab / gate roles): the rows the composer picks from, editable, with the kick of the playing pattern as a
+// reference line. A stab that would land on a kick is moved to the off-beat by the composer; the grid shows where you put it.
+function chordRhythmHtml(f) { const sp = f.D.spec, ch = sp.chords || {}, field = ch.role === 'gate' ? 'gate' : ch.role === 'stab' ? 'rhythm' : null; if (!field || !Array.isArray(ch[field])) return '';
+  const dn = Object.keys(sp.drums.patterns)[f.s.pat.drums[f.bar]] || Object.keys(sp.drums.patterns)[0], kick = clean((sp.drums.patterns[dn] || {}).kick || '................').slice(0, 16);
+  const cells = (str, ref) => [...clean(str).slice(0, 16)].map((c, k) => `<button class="dk-c c${c === '.' ? '0' : c}${ref ? ' ref' : ''}" data-s="${k}" ${ref ? 'disabled tabindex="-1"' : ''} aria-label="step ${k + 1}"></button>`).join('');
+  return `<h4>Chord ${ch.role === 'gate' ? 'gate' : 'stab'} rhythm</h4><div class="dk-grid"><div class="dk-row ref"><span class="dk-ln">kick ${esc(dn)}</span><div class="dk-cells">${cells(kick, true)}</div><span></span></div>
+    ${ch[field].map((r, n) => `<div class="dk-row" data-crow="${n}"><span class="dk-ln">${ch.role} ${n + 1}</span><div class="dk-cells">${cells(r)}</div><button class="dk-x" aria-label="Remove rhythm ${n + 1}" ${ch[field].length > 1 ? '' : 'disabled'}>×</button></div>`).join('')}
+    <div class="dk-row add"><span class="dk-ln"></span><span><button class="btn" data-cradd>+ rhythm</button> <span class="dk-legend">Bars alternate between these every 4 bars; the 4th bar of a phrase answers with the next one. ${ch.role === 'stab' ? 'Stabs on a kick move to the off-beat (the sidechain would swallow them); chord changes get a push stab automatically.' : ''}</span></span></div></div>`; }
+function wireChordRhythm(body, f) { const ch = f.D.spec.chords || {}, field = ch.role === 'gate' ? 'gate' : 'rhythm';
+  $$('[data-crow] .dk-c', body).forEach((b) => { const n = +b.closest('[data-crow]').dataset.crow, k = +b.dataset.s;
+    b.onclick = () => edit((s) => { const r = clean(s.chords[field][n]).padEnd(16, '.').slice(0, 16), cyc = ['.', 'X', 'x', 'g'], c = cyc[(cyc.indexOf(r[k]) + 1) % cyc.length]; s.chords[field][n] = r.slice(0, k) + c + r.slice(k + 1); });
+    b.oncontextmenu = (e) => { e.preventDefault(); edit((s) => { const r = clean(s.chords[field][n]).padEnd(16, '.').slice(0, 16); s.chords[field][n] = r.slice(0, k) + '.' + r.slice(k + 1); }); }; });
+  $$('[data-crow] .dk-x', body).forEach((b) => b.onclick = () => { const n = +b.closest('[data-crow]').dataset.crow; edit((s) => { if (s.chords[field].length > 1) s.chords[field].splice(n, 1); }); });
+  const add = $('[data-cradd]', body); if (add) add.onclick = () => edit((s) => { s.chords[field].push(clean(s.chords[field][s.chords[field].length - 1])); }); }
+
+// ---------------------------------------------------------------- LEAD
+function renderLead(body, f) {
+  const sp = f.D.spec, role = sp.lead ? sp.lead.role : 'none', authored = !!(f.form && f.form.melody), names = spellFor(f.s.meta.key, f.s.meta.mode);
+  const gen = authored ? f.form.melody : sectionMelody(f.s, f.S) || '';
+  const hasLead = !!f.s.kits.lead;
+  body.innerHTML = `<div class="dk-split"><div class="dk-main">
+    <div class="dk-tools"><span class="lbl">Role</span>${seg('Lead role', [['hook', 'Hook'], ['arp', 'Arp'], ['chop', 'Vocal chop'], ['seq', 'Sequence'], ['riff', 'Riff'], ['none', 'Off']], role, 'data-role')}
+      <button class="btn" data-newmel title="Same role, new notes (keeps melodies you wrote)">New melody</button></div>
+    <label class="dk-field col"><span class="lbl">${esc(f.S.name || f.S.type)} melody — ${authored ? '<b>written</b> (yours)' : gen ? 'generated · edit to take over' : 'no lead notes in this section yet — write some'}</span>
+      <textarea class="dk-mel" spellcheck="false" rows="4" aria-label="Melody text">${esc(DOCK.melDirty && DOCK.melText != null ? DOCK.melText : gen)}</textarea></label>
+    <div class="dk-tools"><button class="btn" data-meluse>Use this melody</button>${authored ? '<button class="btn" data-melgen>Back to generated</button>' : ''}<button class="btn" data-meloct="12">Octave up</button><button class="btn" data-meloct="-12">Octave down</button><span class="dk-melerr"></span></div>
+    <p class="dk-legend">16 tokens per bar, bars split by <b>|</b>: a note (<b>C5</b>, <b>F#4</b>, <b>Bb4</b>), <b>-</b> hold, <b>.</b> rest, <b>!</b> accent, <b>~</b> slide, <b>E5:6</b> explicit length. Bars cycle over the section. Key: ${esc(names[f.s.meta.key])} ${esc(f.s.meta.mode)} — ${esc(MODES[f.s.meta.mode].map((x) => names[(f.s.meta.key + x) % 12]).join(' '))}.</p></div>
+    <div class="dk-side"><h4>Lead sound</h4>${hasLead ? presetSelect('lead') + modelSelect('lead') : '<span class="dk-legend">This genre has no lead. Pick a role or write a melody and one is added.</span>'}</div></div>`;
+  if (hasLead) { knobRow($('.dk-side', body), 'lead', synParams(P_LEAD)); wireModel(body); }
+  const ta = $('.dk-mel', body), err = $('.dk-melerr', body), check = () => { const p = parseMelody(ta.value); err.textContent = p.errors.length ? '✗ ' + p.errors[0] : `✓ ${p.bars.length} bar${p.bars.length > 1 ? 's' : ''}`; err.className = 'dk-melerr ' + (p.errors.length ? 'bad' : 'ok'); return p; };
+  ta.oninput = () => { DOCK.melDirty = true; DOCK.melText = ta.value; check(); }; check();
+  $$('[data-role]', body).forEach((b) => b.onclick = () => edit((s) => { s.lead = Object.assign({}, s.lead, { role: b.dataset.role }); delete s.lead.rhythm; if (b.dataset.role !== 'hook') delete s.lead.range; }));
+  $('[data-newmel]', body).onclick = () => edit((s) => { s.melodySeed = (Math.random() * 2 ** 31) >>> 0; DOCK.melDirty = false; });
+  $('[data-meluse]', body).onclick = () => { const p = check(); if (p.errors.length) return; DOCK.melDirty = false; edit((s) => { s.form[f.si].melody = ta.value.trim().replace(/\s+/g, ' '); }); };
+  const mg = $('[data-melgen]', body); if (mg) mg.onclick = () => { DOCK.melDirty = false; edit((s) => { delete s.form[f.si].melody; }); };
+  $$('[data-meloct]', body).forEach((b) => b.onclick = () => { const p = check(); if (p.errors.length) return; ta.value = transposeMelody(ta.value, +b.dataset.meloct, names); DOCK.melDirty = true; DOCK.melText = ta.value; check(); }); }
+
+// ---------------------------------------------------------------- SOUND
+// ---------------------------------------------------------------- CHORDS / STABS (v7.1): everything about the chord part in one
+// place — what it plays (stabs / held / gate / off), its rhythm (grid + a library of the styles' classic stab rhythms), its shape
+// (length, density, register, notes per chord), its sound (presets + the live knobs) and its space (echo and room sends, live).
+const STAB_RHYTHMS = [['Offbeat', '..x...x...x...x.'], ['Skank', '..x..x....x..x..'], ['3-3-2', 'x..x..x.x..x..x.'], ['Push', 'x......x..x.....'], ['Dub', '..x.......x.....'], ['Detroit', 'x..x..x...x..x..'],
+  ['Garage', 'x..x...x..x..x..'], ['Stutter', 'x.x...x.x.....x.'], ['Sparse', 'x...............'], ['Sixteenths', 'x.xxx.xx.x.xx.x.'], ['Answer', '........x..x..x.'], ['Clave', 'x..x..x...x.x...']];
+const REGISTERS = [['low', 'Low', [48, 67]], ['mid', 'Mid', [55, 74]], ['high', 'High', [62, 81]]];
+const P_STABLIVE = ['cut', 'res', 'envAmt', 'aDec', 'aSus', 'aRel', 'gain'], P_PADLIVE = ['cut', 'res', 'aAtk', 'aSus', 'aRel', 'width', 'gain']; // a pad: brightness, swell, body, tail, stereo width
+function renderChords(body, f) { const sp = f.D.spec, ch = sp.chords || {}, role = ch.role || 'none', G = GENRE_BY_ID[sp.genre], hasKit = !!f.s.kits.chords, live = f.D.chordLive || (f.D.chordLive = { echo: 0, verb: 0 });
+  const hasPad = !!f.s.kits.pad && padUsed(f.s), rng = ch.range || [55, 74], reg = (REGISTERS.find((r) => r[2][0] === rng[0]) || [''])[0], field = role === 'gate' ? 'gate' : 'rhythm';
+  body.innerHTML = `<div class="dk-split"><div class="dk-main">
+    <div class="dk-tools"><span class="lbl">Plays</span>${seg('Chord role', [['stab', 'Stabs'], ['pad', 'Held chords'], ['gate', 'Gate'], ['none', 'Off']], role, 'data-crole')}<button class="btn" data-cnew title="New voicings and rhythm variation for the chords — everything else stays">New chords</button></div>
+    ${role === 'stab' || role === 'gate' ? `<div class="dk-tools wrap"><span class="lbl">Rhythm</span><div class="dk-chips">${STAB_RHYTHMS.map(([n, r]) => `<button class="dk-chip" data-crh="${r}" title="${r}">${n}</button>`).join('')}</div></div>${chordRhythmHtml(f)}` : `<p class="dk-legend">${role === 'pad' ? 'Held chords: one chord per harmonic step, voiced smoothly. Switch to Stabs or Gate to play a rhythm.' : 'The chord part is off in this track.'}</p>`}
+    <div class="dk-tools wrap"><span class="lbl">Length</span>${seg('Length', [[0.5, '1/32'], [1, '1/16'], [1.5, '3/32'], [2, '1/8'], [3, '3/16'], [4, '1/4']], ch.len || (G.chords && G.chords.len) || 1, 'data-clen')}
+      <span class="lbl">Density</span>${seg('Density', [[0, 'Every bar'], [0.5, 'Every 2nd'], [0.75, 'Every 4th']], ch.sparse || 0, 'data-csp')}</div>
+    <div class="dk-tools wrap"><span class="lbl">Register</span>${seg('Register', REGISTERS.map(([k, l]) => [k, l]), reg, 'data-creg')}<span class="lbl">Notes</span>${seg('Notes per chord', [[3, '3'], [4, '4'], [5, '5']], ch.voices || (role === 'stab' ? 4 : 5), 'data-cvo')}</div>
+    <p class="dk-legend">Rhythm, length, density, register and notes apply on the next bar. The knobs on the right act at once.</p>
+    ${hasKit ? presetGrid('chords', sp.genre) : ''}
+    ${hasPad ? `<h4 class="dk-padh">Pad — the held chord bed under the stabs</h4><div class="dk-tools"><span class="lbl">Pad</span>${seg('Pad on/off', [['on', 'On'], ['off', 'Off']], f.D.mute[6] ? 'off' : 'on', 'data-padon')}</div>${presetGrid('pad', sp.genre)}<div class="dk-padknobs"></div>` : ''}</div>
+    <div class="dk-side"><h4>Stab sound — live</h4><div class="dk-stabknobs"></div><h4>Space — live</h4><div class="dk-stabfx"></div>
+      <span class="dk-legend">Echo throws the chords into the harmonic echo (its repeats climb in key); Room sends them to the reverb. Both stay until you turn them back.</span></div></div>`;
+  const sk = $('.dk-stabknobs', body); if (sk && hasKit) knobRow(sk, 'chords', synParams(role === 'pad' ? P_PADLIVE : P_STABLIVE));
+  const fx = $('.dk-stabfx', body); dknob(fx, { label: 'Echo', min: 0, max: 1, value: live.echo, def: 0, onchange: (v) => { live.echo = v; send({ type: 'partfx', deck: DOCK.deck, ch: 5, echo: v > 0.005 ? v : -1 }); } });
+  dknob(fx, { label: 'Room', min: 0, max: 1, value: live.verb, def: 0, onchange: (v) => { live.verb = v; send({ type: 'partfx', deck: DOCK.deck, ch: 5, verb: v }); } });
+  if (hasKit) wirePresetGrid(body, 'chords', $$('.dk-pgrid', body)[0]); wireChordRhythm(body, f);
+  if (hasPad) { wirePresetGrid(body, 'pad', $$('.dk-pgrid', body)[hasKit ? 1 : 0]); knobRow($('.dk-padknobs', body), 'pad', synParams(P_PADLIVE));
+    dknob(fx, { label: 'Pad echo', min: 0, max: 1, value: live.pecho || 0, def: 0, onchange: (v) => { live.pecho = v; send({ type: 'partfx', deck: DOCK.deck, ch: 6, echo: v > 0.005 ? v : -1 }); } });
+    dknob(fx, { label: 'Pad room', min: 0, max: 1, value: live.pverb || 0, def: 0, onchange: (v) => { live.pverb = v; send({ type: 'partfx', deck: DOCK.deck, ch: 6, verb: v }); } });
+    $$('[data-padon]', body).forEach((b) => b.onclick = () => { setMute(DOCK.deck, 6, b.dataset.padon === 'off'); renderDock(); }); }
+  { const nb = $('[data-cnew]', body); if (nb) nb.onclick = () => regenPart(DOCK.deck, 'chords'); }
+  $$('[data-crole]', body).forEach((b) => b.onclick = () => edit((s) => { s.chords = s.chords || {}; const r = b.dataset.crole; s.chords.role = r; if (r === 'stab' && !s.chords.rhythm) { s.chords.rhythm = ['..x...x...x...x.']; delete s.chords.gate; } if (r === 'gate') { delete s.chords.rhythm; if (!s.chords.gate) s.chords.gate = ['x.xx.xx.x.xx.xx.']; } if (r === 'pad' || r === 'none') { delete s.chords.rhythm; delete s.chords.gate; } }, 1, true));
+  $$('[data-crh]', body).forEach((b) => b.onclick = () => edit((s) => { s.chords = s.chords || {}; const r = b.dataset.crh; s.chords[field] = [r, r]; }, 1, true));
+  $$('[data-clen]', body).forEach((b) => b.onclick = () => edit((s) => { s.chords.len = +b.dataset.clen; }, 1, true));
+  $$('[data-csp]', body).forEach((b) => b.onclick = () => edit((s) => { if (+b.dataset.csp) s.chords.sparse = +b.dataset.csp; else delete s.chords.sparse; }, 1, true));
+  $$('[data-creg]', body).forEach((b) => b.onclick = () => edit((s) => { s.chords.range = (REGISTERS.find((r) => r[0] === b.dataset.creg) || REGISTERS[1])[2].slice(); }, 1, true));
+  $$('[data-cvo]', body).forEach((b) => b.onclick = () => edit((s) => { s.chords.voices = +b.dataset.cvo; }, 1, true)); }
+// the sound browser: every preset of the slot as a card — the genre's palette first (★), then everything else. A card applies on
+// the next bar, level-matched in context. The wavetable model gets its own controls (table, motion, unison, filter type).
+const P_WT = [['pos', 'Position', 0, 1], ['posEnv', 'Pos env', 0, 1], ['posLfo', 'Pos LFO', 0, 1], ['l2Sync', 'Motion beats', 0.25, 32, 'log', 'beat'], ['uni', 'Unison', 1, 7], ['spread', 'Spread', 0, 1], ['fold', 'Fold', 0, 1], ['sub', 'Sub', 0, 1], ['noiseAmt', 'Breath', 0, 0.3], ['vow', 'Vowel', 0, 4], ['vowLfo', 'Vowel LFO', 0, 2]];
+const WT_FILTERS = [[0, 'Ladder'], [1, 'Band'], [2, 'High'], [3, 'Vowel'], [4, 'Comb']];
+function padUsed(s) { const ev = s.ev; for (let k = 0; k < ev.n; k++) if (ev.ch[k] === 6) return true; return false; }
+function presetGrid(slot, gid) { const bank = SOUND_BANK[slot]; if (!bank) return ''; const D = decks[DOCK.deck], cur = D.spec && D.spec.sound && D.spec.sound[slot] && D.spec.sound[slot].preset || '', pal = (paletteFor(gid)[slot] || []);
+  const card = (k) => { const p = bank[k], short = (p.d.split(' — ')[1] || p.d).slice(0, 60); return `<button class="dk-pcard${k === cur ? ' on' : ''}${pal.includes(k) ? ' fit' : ''}" data-pset="${k}" title="${esc(p.d)}"><b>${pal.includes(k) ? '★ ' : ''}${esc(p.label)}</b><small>${esc(short)}</small>${p.k && p.k.model === 'wt' ? '<i>wavetable</i>' : ''}</button>`; };
+  const rest = Object.keys(bank).filter((k) => !pal.includes(k));
+  return `<div class="dk-pgrid"><button class="dk-pcard${cur ? '' : ' on'}" data-pset=""><b>Genre sound</b><small>the genre's own ${slot}</small></button>${pal.map(card).join('')}${rest.map(card).join('')}</div>`; }
+function wirePresetGrid(body, slot, grid) { $$('[data-pset]', grid || body).forEach((b) => b.onclick = () => { const val = b.dataset.pset; edit((s) => { if (!val) { if (s.sound) delete s.sound[slot]; } else (s.sound || (s.sound = {}))[slot] = { preset: val }; if (s.sound && !Object.keys(s.sound).length) delete s.sound; }, 1, true);
+    toast(val ? `${slot}: ${SOUND_BANK[slot][val].label} from the next bar — ${SOUND_BANK[slot][val].d}` : `${slot}: back to the genre sound`); }); }
+function renderSound(body, f, only) {
+  const slots = slotsOf(f.s).filter((x) => !only || only.includes(x)); if (!slots.length) { body.innerHTML = '<div class="dk-empty">This genre has no sound for this part.</div>'; return; } if (!slots.includes(DOCK.slot)) DOCK.slot = slots.includes('chords') ? 'chords' : slots[0]; const slot = DOCK.slot, drum = !!P_DRUM[slot];
+  const edited = f.D.spec.sound ? Object.keys(f.D.spec.sound) : [];
+  body.innerHTML = `<div class="dk-tools"><div class="dk-chips">${slots.map((x) => `<button class="dk-chip${x === slot ? ' on' : ''}${edited.includes(x) ? ' live' : ''}" data-slot="${x}" title="${edited.includes(x) ? 'edited' : ''}">${x}</button>`).join('')}</div>
+    ${drum ? '' : modelSelect(slot)}<button class="btn" data-reset ${edited.includes(slot) ? '' : 'disabled'}>Reset ${slot} to the genre sound</button></div>${presetGrid(slot, f.s.meta.gid)}<div class="dk-soundknobs"></div>${!drum && kitVal(slot, 'model') === 'wt' ? `<div class="dk-wt"><span class="lbl">Table</span>${seg('Table', WT_NAMES.map((n, k) => [k, n]), kitVal(slot, 'table') || 0, 'data-wtt')}<span class="lbl">Filter</span>${seg('Filter type', WT_FILTERS, kitVal(slot, 'ftype') || 0, 'data-wtf')}</div><div class="dk-wtknobs"></div>` : ''}
+    <p class="dk-legend">Knobs act instantly on the playing deck — sounding notes morph with them — and are saved into the score (<b>sound.${slot}</b>). Drag up/down · Shift for fine · double-click resets · arrow keys.</p>`;
+  // (v9.3) a snare / hats / percussion part that plays the kit family is shaped by its Tune / Decay / Tone / Snap (the kit, above): the
+  // synthesized voice's knobs would do nothing there, so they appear only for the synth voice (Synth (9.2), or a sound picked below)
+  const fam = (f.D.spec.sound && f.D.spec.sound.drums && f.D.spec.sound.drums.family) || BANK_FOR_GENRE[f.D.gid] || 'forge', famOn = drum && slot !== 'kick' && fam !== 'forge' && !(f.D.spec.sound && f.D.spec.sound[slot] && f.D.spec.sound[slot].preset);
+  if (famOn) $('.dk-soundknobs', body).innerHTML = `<p class="dk-legend">The ${slot} plays the ${fam}-style kit: shape it with Tune, Decay, Tone and Snap above. Pick a sound below to play a synthesized ${slot} instead.</p>`; else knobRow($('.dk-soundknobs', body), slot, drum ? P_DRUM[slot] : P_SYN);
+  wireModel(body); wirePresetGrid(body, slot);
+  const wk = $('.dk-wtknobs', body); if (wk) { knobRow(wk, slot, P_WT); $$('[data-wtt]', body).forEach((b) => b.onclick = () => { liveKit(slot, 'table', +b.dataset.wtt); renderDock(); }); $$('[data-wtf]', body).forEach((b) => b.onclick = () => { liveKit(slot, 'ftype', +b.dataset.wtf); renderDock(); }); }
+  $$('[data-slot]', body).forEach((b) => b.onclick = () => { DOCK.slot = b.dataset.slot; renderDock(); });
+  $('[data-reset]', body).onclick = () => edit((s) => { delete s.sound[slot]; if (!Object.keys(s.sound).length) delete s.sound; }, 1, true); }
+
+// ---------------------------------------------------------------- (v9.3) DRUMS · SOUND: the kit family and its voices
+// The family (808-style … acoustic, lo-fi, or the 9.2 synth) for the whole kit, then Tune / Decay / Tone / Snap for the snare, the
+// hats and the percussion, and a sample of your own for any voice (kept in this browser; it plays on both decks until removed).
+function renderKitFamily(body, f) { const sp = f.D.spec, cur = sp.sound && sp.sound.drums && sp.sound.drums.family || '', el = document.createElement('div'); el.className = 'dk-kitfam';
+  el.innerHTML = `<h4>Kit</h4><div class="dk-tools wrap">${seg('Kit family', KIT_FAMS, cur, 'data-kfam')}</div><div class="dk-knobs dk-bankknobs"></div>
+    <h4>Your own samples</h4><div class="dk-tools wrap dk-samples">${USER_VOICES.map(([k, l]) => `<label class="dk-samp${USER_SAMPLES[k] ? ' on' : ''}"><span>${l}</span><input type="file" accept="audio/wav,audio/x-wav,audio/mpeg,audio/ogg,.wav,.mp3,.ogg" data-samp="${k}" aria-label="${l}: load a sample"><button class="btn" data-sampx="${k}" ${USER_SAMPLES[k] ? '' : 'disabled'} aria-label="${l}: remove the sample">✕</button></label>`).join('')}</div>
+    <p class="dk-legend">The families are FORGE's own models of classic machines — no samples of them. A sample you load replaces that voice in every track until you remove it.</p>`;
+  body.insertBefore(el, body.firstChild);
+  $$('[data-kfam]', el).forEach((b) => b.onclick = () => { const v = b.dataset.kfam; edit((s) => { s.sound = s.sound || {}; s.sound.drums = Object.assign({}, s.sound.drums); if (v) s.sound.drums.family = v; else delete s.sound.drums.family; if (!Object.keys(s.sound.drums).length) delete s.sound.drums; }, 1, true); send({ type: 'kit', deck: DOCK.deck, slot: 'drums', p: { family: v || BANK_FOR_GENRE[f.D.gid] || 'forge' } }); });
+  const kb = $('.dk-bankknobs', el), P = (sp.sound && sp.sound.drums && sp.sound.drums.bank) || {};
+  for (const part of ['snare', 'hats', 'perc']) { const g = document.createElement('div'); g.className = 'dk-bankgrp'; g.innerHTML = `<span class="lbl">${part}</span>`; kb.appendChild(g);
+    for (const [k, l, mn, mx, cv, u] of BANK_KNOBS) dknob(g, { label: l, min: mn, max: mx, curve: cv, unit: u, value: (P[part] && P[part][k] != null) ? P[part][k] : BANK_DEF[k], def: BANK_DEF[k], onchange: (v) => {
+      const q = { [k]: v }; send({ type: 'kit', deck: DOCK.deck, slot: part, p: { bank: q } }); const s = f.D.spec; s.sound = s.sound || {}; s.sound.drums = s.sound.drums || {}; s.sound.drums.bank = s.sound.drums.bank || {}; s.sound.drums.bank[part] = Object.assign({}, s.sound.drums.bank[part], q); } }); }
+  $$('[data-samp]', el).forEach((inp) => inp.onchange = async () => { const file = inp.files && inp.files[0]; if (!file) return; await startAudio(); try { await loadUserSample(inp.dataset.samp, file); toast(`${file.name} plays as the ${inp.dataset.samp}`); renderDock(); } catch (e) { toast(`That file could not be read as audio (${e.message})`); } });
+  $$('[data-sampx]', el).forEach((b) => b.onclick = () => { removeUserSample(b.dataset.sampx); renderDock(); }); }
+// ---------------------------------------------------------------- (v9.3) DRUMS · PATTERN: the live groove
+function renderGroove(body, f) { const D = f.D, G = D.groove || (D.groove = { density: 0.5, complexity: 0.5 }), el = document.createElement('div'); el.className = 'dk-tools wrap dk-groove';
+  el.innerHTML = `<span class="lbl">Groove</span><label class="dk-field"><span class="lbl">Density</span><input type="range" min="0" max="1" step="0.01" value="${G.density}" data-gden aria-label="Density: fewer ghost notes ↔ more hat ratchets"></label>
+    <label class="dk-field"><span class="lbl">Complexity</span><input type="range" min="0" max="1" step="0.05" value="${G.complexity}" data-gcx aria-label="Complexity: how far the drums stray from the written bar"></label><button class="btn" data-gnew>Redraw with this complexity</button>`;
+  const main = $('.dk-main', body) || body; main.appendChild(el);
+  $('[data-gden]', el).oninput = (e) => { G.density = +e.target.value; send({ type: 'groove', deck: DOCK.deck, density: G.density }); };
+  $('[data-gcx]', el).onchange = (e) => { G.complexity = +e.target.value; };
+  $('[data-gnew]', el).onclick = () => regenPart(DOCK.deck, 'drums', undefined, { complexity: G.complexity }); }
+// ---------------------------------------------------------------- (v9.3) A PART'S MIX: level, Delay and Reverb sends (tails ring on)
+function renderPartMix(body, f, slots) { const D = f.D, M = D.partMix || (D.partMix = {}), used = slots.filter((x) => slotsOf(f.s).includes(x));
+  body.innerHTML = `<div class="dk-partmix">${used.map((x) => `<div class="dk-pm" data-pm="${x}"><h4>${x}</h4><div class="dk-knobs"></div><button class="btn" data-pmfx="${x}">Beat FX on the ${x} →</button></div>`).join('') || '<div class="dk-empty">This genre does not play this part.</div>'}
+    <p class="dk-legend">Delay sends the part into the deck's tempo echo, Reverb into the room — both keep ringing after you turn them down. Mute a part with its button on the deck (PLAY).</p></div>`;
+  for (const x of used) { const c = SLOT_CH[x], st = M[x] || (M[x] = { level: 1, echo: 0, verb: 0 }), box = $(`[data-pm="${x}"] .dk-knobs`, body);
+    dknob(box, { label: 'Level', min: 0, max: 1.5, value: st.level, def: 1, onchange: (v) => { st.level = v; send({ type: 'partGain', deck: DOCK.deck, ch: c, v }); } });
+    dknob(box, { label: 'Delay', min: 0, max: 1, value: st.echo, def: 0, onchange: (v) => { st.echo = v; send({ type: 'partfx', deck: DOCK.deck, ch: c, echo: v > 0.005 ? v : -1 }); } });
+    dknob(box, { label: 'Reverb', min: 0, max: 1, value: st.verb, def: 0, onchange: (v) => { st.verb = v; send({ type: 'partfx', deck: DOCK.deck, ch: c, verb: v }); } }); }
+  $$('[data-pmfx]', body).forEach((b) => b.onclick = () => { const i = DOCK.deck; SHELL.fxDeck = i; bfxTarget(i, SLOT_CH[b.dataset.pmfx]); go('fx'); }); }
+// ---------------------------------------------------------------- FX
+let space = { t60: 2.4, damp: 0.4 };
+function renderFx(body, f) {
+  const m = f.D.spec.mix, D = f.D; if (!D.fxOn) { D.fxOn = new Array(FX_RACK.length).fill(0); D.fxAmt = FX_RACK_DEF.slice(); }
+  body.innerHTML = `<div class="dk-split"><div class="dk-main"><h4>FX rack — on the whole deck, tempo-synced</h4>
+    <div class="dk-rack">${FX_RACK.map(([k, l, d], n) => `<div class="dk-fxu${D.fxOn[n] ? ' on' : ''}" data-fxu="${n}"><button data-fxt="${n}" aria-pressed="${!!D.fxOn[n]}" title="${esc(d)} · click toggles, hold Shift for momentary">${l}</button><small>${esc(d)}</small></div>`).join('')}</div>
+    <h4>Performance — fires now, on the playing deck</h4>
+    <div class="dk-pads">${FX_PADS.map(([l, k, st, ear], n) => `<button class="dk-pad" data-fx="${n}">${l}<small>${ear != null ? 'in key' : st / 16 >= 1 ? st / 16 + ' bar' + (st > 16 ? 's' : '') : st / 4 + ' beats'}</small></button>`).join('')}
+      <button class="dk-pad throw" data-throw="8">Echo throw<small>½ bar</small></button><button class="dk-pad throw" data-throw="16">Echo throw<small>1 bar</small></button></div>
+    <p class="dk-legend">Echo throw sends the music bus (chords, pad, lead, arp) into the tempo-synced delay and reverb, the classic DJ move before a cut or a mix-out. The composed arrangement already places risers, impacts and downlifters; these are yours on top.</p></div>
+    <div class="dk-side"><h4>Deck sends</h4><div class="dk-knobs sends"></div><h4>Master space</h4><div class="dk-knobs room"></div><span class="dk-legend">Room is shared by both decks.</span></div></div>`;
+  const sends = $('.sends', body), mixKnob = (label, key, eng, mn, mx) => dknob(sends, { label, min: mn, max: mx, value: m[key], def: m[key], onchange: (v) => { send({ type: 'sends', deck: DOCK.deck, p: { [eng]: v } }); f.D.spec.mix[key] = +v.toFixed(3); } });
+  if (m.echo == null) m.echo = 1; mixKnob('Reverb', 'verb', 'verb', 0, 1); mixKnob('Delay', 'delay', 'delay', 0, 1); mixKnob('Harm echo', 'echo', 'echo', 0, 2); mixKnob('Pump', 'sidechain', 'sc', 0, 0.9);
+  // channel character: Heat = saturation on every strip (bass in parallel), Punch = transient shapers on the drums — live
+  { const G0 = GENRE_BY_ID[f.D.gid] || { mix: {} }; if (m.heat == null) m.heat = G0.mix.heat != null ? G0.mix.heat : 1; if (m.punch == null) m.punch = G0.mix.punch != null ? G0.mix.punch : 1; }
+  mixKnob('Heat', 'heat', 'heat', 0, 2); mixKnob('Punch', 'punch', 'punch', 0, 2);
+  const room = $('.room', body); dknob(room, { label: 'Size', min: 0.6, max: 6, curve: 'log', unit: 's', value: space.t60, def: 2.4, onchange: (v) => { space.t60 = v; send({ type: 'space', t60: v, damp: space.damp }); } });
+  dknob(room, { label: 'Damp', min: 0, max: 0.9, value: space.damp, def: 0.4, onchange: (v) => { space.damp = v; send({ type: 'space', t60: space.t60, damp: v }); } });
+  $$('[data-fxu]', body).forEach((u) => { const n = +u.dataset.fxu; dknob(u, { label: 'Amount', min: 0, max: 1, value: D.fxAmt[n], def: FX_RACK_DEF[n], onchange: (v) => { D.fxAmt[n] = v; send({ type: 'fx', deck: DOCK.deck, name: FX_RACK[n][0], amt: v }); } }); });
+  $$('[data-fxt]', body).forEach((b) => { const n = +b.dataset.fxt, setOn = (on) => { D.fxOn[n] = on ? 1 : 0; send({ type: 'fx', deck: DOCK.deck, name: FX_RACK[n][0], on: !!on, amt: D.fxAmt[n] }); b.closest('.dk-fxu').classList.toggle('on', !!on); b.setAttribute('aria-pressed', !!on); };
+    b.onpointerdown = (e) => { if (e.shiftKey) { setOn(1); const off = () => { setOn(0); document.removeEventListener('pointerup', off, true); document.removeEventListener('pointercancel', off, true); }; document.addEventListener('pointerup', off, true); document.addEventListener('pointercancel', off, true); } }; // (the release is caught by the page: it reaches this hold even if the button was redrawn)
+    b.onclick = (e) => { if (!e.shiftKey) setOn(!D.fxOn[n]); }; fxSetters[DOCK.deck][n] = setOn; });
+  $$('[data-fx]', body).forEach((b) => b.onclick = async () => { await startAudio(); const [, k, st, ear] = FX_PADS[+b.dataset.fx]; if (ear != null) earCandy(DOCK.deck, ear); else send({ type: 'fxNow', deck: DOCK.deck, kind: k, steps: st }); flash(b); });
+  $$('[data-throw]', body).forEach((b) => b.onclick = () => { send({ type: 'throw', deck: DOCK.deck, steps: +b.dataset.throw }); flash(b); }); }
+function flash(b) { b.classList.remove('hit'); void b.offsetWidth; b.classList.add('hit'); }
+
+// ---------------------------------------------------------------- SCORE (the text form, for people and AI models)
+function renderScoreTab(body, f) {
+  const D = decks[DOCK.deck]; const txt = DOCK.scoreDirty && DOCK.scoreText != null ? DOCK.scoreText : D.spec ? JSON.stringify(D.spec, null, 1) : '';
+  body.innerHTML = `<div class="dk-split wide"><div class="dk-main"><textarea class="dk-json" spellcheck="false" aria-label="Score JSON">${esc(txt)}</textarea>
+    <div class="dk-tools"><button class="btn" data-sc="check">Check</button><button class="btn primary" data-sc="apply">Apply on the next 4 bars</button><button class="btn" data-sc="load">Load as a new track</button><button class="btn" data-sc="copy">Copy score</button><button class="btn" data-sc="prompt" title="The FORGE score guide + this score — paste into any AI model and ask for a song">Copy AI prompt</button><button class="btn" data-sc="revert" title="Back to what the deck is playing">Revert</button></div></div>
+    <div class="dk-side"><h4>Songs</h4><div class="dk-songs">${SONGS.map((s, k) => `<button class="dk-song" data-song="${k}"><b>${esc(s.title)}</b><small>${esc(GENRE_BY_ID[s.genre].name)} · ${s.key} ${s.mode} · ${s.bpm}</small></button>`).join('')}</div><h4>Checks</h4><div class="dk-checks"></div></div></div>`;
+  const ta = $('.dk-json', body); ta.oninput = () => { DOCK.scoreDirty = true; DOCK.scoreText = ta.value; };
+  const parse = () => { try { return JSON.parse(ta.value); } catch (e) { showChecks({ ok: false, errors: [{ path: '', msg: 'not valid JSON: ' + e.message, hint: 'check commas and quotes' }], warnings: [] }); return null; } };
+  const loadSpec = async (spec, i) => { let s; try { s = await compileAsync(spec, { fastLevels: true }); } catch (e) { showChecks(e.validation || { ok: false, errors: [{ path: '', msg: e.message }], warnings: [] }); return; } startAudio().then(() => { const t = loadTarget(i); if (t < 0) { toast(onAirMsg(i)); return; } if (t !== i) toast(`Deck ${'AB'[i]} is on air — the score loads on deck ${'AB'[t]}`); installScore(t, s, { play: !decks[t ^ 1].playing }); DOCK.tab = 'score'; renderDock(); }); }; // (v9.2: through the load policy — it replaced the only playing deck)
+  $$('[data-sc]', body).forEach((b) => b.onclick = () => { const a = b.dataset.sc;
+    if (a === 'copy') { copyText(ta.value, 'Score copied'); return; }
+    if (a === 'prompt') { copyText(PROMPT_CARD + '\n\n## The current score (edit it, or write a new one)\n```json\n' + ta.value + '\n```\n', 'AI prompt copied — paste it into any model, then ask for the song you want'); return; }
+    if (a === 'revert') { DOCK.scoreDirty = false; renderDock(); return; }
+    // (v9.2) the check compiles on the composer thread: compiled here it froze the page for up to 2.7 s on a phone (Android: time taken from the audio engine's worker)
+    const spec = parse(); if (!spec) return; const v = validateSpec(spec); showChecks(v, []); if (!v.ok) return;
+    if (a === 'check') { compileAsync(JSON.parse(JSON.stringify(spec)), { fastLevels: true }).then((sc) => showChecks(v, lintScore(sc)), (e) => showChecks(e.validation || { ok: false, errors: [{ path: '', msg: e.message }], warnings: [] }, [])); return; }
+    if (a === 'load' || !D.spec || spec.genre !== D.spec.genre && !D.playing) { loadSpec(spec, DOCK.deck); return; }
+    D.spec = spec; DOCK.scoreDirty = false; commitSpec(DOCK.deck, { q: 4 }).then((s) => { if (s) toast('Score applied on the next 4-bar line'); }); });
+  $$('[data-song]', body).forEach((b) => b.onclick = () => { const spec = JSON.parse(JSON.stringify(SONGS[+b.dataset.song])); const i = DOCK.deck, D2 = decks[i];
+    loadSpec(spec, i); });
+  renderChecks(); }
+function renderChecks() { const D = decks[DOCK.deck]; if (!$('.dk-checks')) return; showChecks(D.val || { ok: true, errors: [], warnings: [] }, D.lint || []); }
+function showChecks(v, lint) { const el = $('.dk-checks'); if (!el) return; const items = [];
+  for (const e of v.errors) items.push(`<li class="bad"><b>${esc(e.path || '(root)')}</b> ${esc(e.msg)}${e.hint ? `<small>fix: ${esc(e.hint)}</small>` : ''}</li>`);
+  for (const w of v.warnings) items.push(`<li class="warn"><b>${esc(w.path || '(root)')}</b> ${esc(w.msg)}${w.hint ? `<small>${esc(w.hint)}</small>` : ''}</li>`);
+  for (const w of lint || []) items.push(`<li class="warn"><b>${esc(w.path)}</b> ${esc(w.msg)}<small>${esc(w.hint)}</small></li>`);
+  el.innerHTML = items.length ? `<ul>${items.join('')}</ul>` : '<p class="dk-legend ok">✓ valid · no musical warnings</p>'; }
+function copyText(t, msg) { const done = () => toast(msg); if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, () => fallbackCopy(t, done)); else fallbackCopy(t, done); }
+function fallbackCopy(t, done) { const ta = document.createElement('textarea'); ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); done(); } catch (e) { toast('Copy blocked by the browser — select the text and copy it'); } ta.remove(); }
+
+// ---------------------------------------------------------------- per frame: playhead + context, cheap
+function dockFrame() { const el = $('#dock'); if (!el) return; const f = focus();
+  // (v9.2) not while a finger or the mouse is down — a knob being dragged or an FX held (it was rebuilt under the pointer: the knob
+  // died mid-drag, a held Tape stop never got its release); the re-render runs when the pointer lets go
+  if (f && f.si !== DOCK.lastSec && DOCK.secPin < 0) { const typing = document.activeElement && /TEXTAREA|INPUT|SELECT/.test(document.activeElement.tagName) && el.contains(document.activeElement); if (!typing && !DOCK.melDirty) { if (PTR.size) DOCK.renderLater = true; else { DOCK.renderLater = false; DOCK.dpat = DOCK.bpat = null; renderDock(); return; } } }
+  const now = $('.dk-now', el); if (!f) { setText(now, ''); return; }
+  const live = f.D.playing && f.liveBar >= f.S.bar0 && f.liveBar < f.S.bar0 + f.S.bars; setText(now, live ? `bar ${f.liveBar - f.S.bar0 + 1}/${f.S.bars}` : f.D.playing ? 'pinned' : 'stopped');
+  const step = live ? Math.floor(f.step) : -1; if (step === DOCK.lastStep) return; DOCK.lastStep = step;
+  const pat = DOCK.tab === 'drums' ? f.s.pat.drums[f.liveBar] : DOCK.tab === 'bass' ? f.s.pat.bass[f.liveBar] : -2; if (pat === -2) return;
+  const names = Object.keys(DOCK.tab === 'drums' ? f.D.spec.drums.patterns : f.D.spec.bass.patterns), shown = DOCK.tab === 'drums' ? DOCK.dpat : DOCK.bpat, pg = DOCK.tab === 'drums' ? DOCK.dpage : DOCK.bpage;
+  const barInPat = f.liveBar - f.S.bar0; $$('.dk-chip.live', el).forEach((c) => c.classList.toggle('live', false)); const lc = $(`.dk-chip[data-${DOCK.tab === 'drums' ? 'pat' : 'bp'}="${CSS.escape(names[pat] || '')}"]`, el); if (lc) lc.classList.add('live');
+  $$('.dk-c.ph', el).forEach((c) => c.classList.remove('ph'));
+  if (live && names[pat] === shown && (barInPat % (DOCK.nb || 1)) === pg) $$('.dk-row[data-lane] .dk-cells', el).forEach((row) => { const c = row.children[step]; if (c) c.classList.add('ph'); }); }

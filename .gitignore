@@ -1,0 +1,8 @@
+dist/
+out/
+build/
+node_modules/
+*.png
+soak.json
+verification/
+__pycache__/

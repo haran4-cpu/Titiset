@@ -1,0 +1,31 @@
+{
+ "forge": 1,
+ "title": "Glass Arcade",
+ "genre": "synthwave",
+ "seed": 1986,
+ "bpm": 104, "key": "D", "mode": "minor",
+ "notes": "i – bVI – bIII – bVII at two bars per chord; an 8-bar written hook that lands on chord tones on every beat.",
+ "harmony": { "progression": ["i", "bVI", "bIII", "bVII"], "barsPerChord": 2, "extension": "triad", "breakBarsPerChord": 4 },
+ "drums": {
+  "patterns": {
+   "A": { "kick": "X.......X.......", "snare": "....X.......X...", "closed": "x.x.x.x.x.x.x.x." },
+   "B": { "kick": "X.......X.......|X.......X...X...", "snare": "....X.......X...", "closed": "xxx.xxx.xxx.xxx.", "open": "......x.......x." }
+  },
+  "fill": ["............XXXX", "........x.x.XXXX"]
+ },
+ "bass": { "patterns": { "A": "R.R.R.R.R.R.R.R.", "B": "R.O.R.O.R.O.R.O.|R.O.R.O.R.O.N.A." }, "gate": 0.7 },
+ "lead": { "role": "hook", "range": [62, 84] },
+ "sound": { "lead": { "model": "supersaw", "cut": 3000, "detune": 0.35, "aRel": 0.35 } },
+ "form": [
+  { "section": "intro",  "bars": 16, "drums": "A", "bass": "A" },
+  { "section": "groove", "bars": 16, "layer": "verse", "drums": "A", "bass": "A" },
+  { "section": "build",  "bars": 8 },
+  { "section": "drop",   "bars": 16, "drums": "A", "bass": "B",
+    "melody": "A4 - - - D5 - - - F5 - - - E5 - D5 - | C5 - - - A4 - - - - - - - . . . . | Bb4 - - - D5 - - - F5 - - - G5 - F5 - | D5 - - - - - - - . . . . C5 - D5 - | C5 - - - F5 - - - A5 - - - G5 - F5 - | E5 - - - C5 - - - - - - - . . . . | G4 - - - C5 - - - E5 - - - D5 - C5 - | D5 - - - - - - - E5 - - - - - - -" },
+  { "section": "break",  "bars": 16 },
+  { "section": "build",  "bars": 8 },
+  { "section": "drop",   "bars": 16, "name": "drop 2", "drums": "B", "bass": "B",
+    "melody": "A4 - - - D5 - - - F5 - - - E5 - D5 - | C5 - - - A4 - - - - - - - . . . . | Bb4 - - - D5 - - - F5 - - - G5 - F5 - | D5 - - - - - - - . . . . C5 - D5 - | C5 - - - F5 - - - A5 - - - G5 - F5 - | E5 - - - C5 - - - - - - - . . . . | G4 - - - C5 - - - E5 - - - D5 - C5 - | D5 - - - - - - - E5 - - - - - - -" },
+  { "section": "outro",  "bars": 16, "drums": "A", "bass": "A" }
+ ]
+}

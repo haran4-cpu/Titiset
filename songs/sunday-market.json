@@ -1,0 +1,27 @@
+{
+ "forge": 1,
+ "title": "Sunday Market",
+ "genre": "amapiano",
+ "seed": 714,
+ "bpm": 113, "key": "A", "mode": "dorian",
+ "notes": "A dorian vamp (Am9 – D9), log-drum bass written as two 2-bar phrases, wood + conga + tambourine pockets.",
+ "harmony": { "progression": ["i9", "IV9"], "barsPerChord": 2, "extension": "9" },
+ "drums": {
+  "patterns": {
+   "A": { "kick": "X...X...X...X...", "snare": "....x.......x...", "shaker": "xgxgxgxgxgxgxgxg",
+          "perc": [ { "kind": "wood", "steps": "..x...x..x...x.." }, { "kind": "conga", "steps": "...x..x....x..x." } ] },
+   "B": { "kick": "X.......X.......|X.......X...x...", "snare": "....x.......x...", "shaker": "xgxxxgxxxgxxxgxx", "open": "..g.......g.....",
+          "perc": [ { "kind": "wood", "steps": "..x..x..x..x..x." }, { "kind": "tamb", "steps": "....x.......x..." }, { "kind": "rim", "steps": "...x.....x....x." } ] }
+  }
+ },
+ "bass": { "patterns": { "A": "R..R..r...R..Ro.|..R...R.r..R..O.", "B": "..R..R.R..r...O.|R..N..R...r.A..." }, "gate": 0.85 },
+ "sound": { "bass": { "glide": 0.09 } },
+ "form": [
+  { "section": "intro",  "bars": 16, "drums": "A", "bass": "A" },
+  { "section": "groove", "bars": 32, "drums": "A", "bass": "A" },
+  { "section": "break",  "bars": 16 },
+  { "section": "drop",   "bars": 32, "drums": "B", "bass": ["B", "A"] },
+  { "section": "groove", "bars": 16, "layer": "groove2", "drums": "B", "bass": "B" },
+  { "section": "outro",  "bars": 16, "drums": "A", "bass": "A" }
+ ]
+}

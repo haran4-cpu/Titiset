@@ -1,0 +1,11 @@
+// loads engine + composer sources into one sandbox (same concatenation order as the build)
+const fs = require('fs'), path = require('path'), vm = require('vm');
+const ROOT = path.join(__dirname, '..', 'src');
+function files() { const e = fs.readdirSync(path.join(ROOT, 'engine')).filter((f) => /^\d\d[a-z]?_.*\.js$/.test(f)).sort().map((f) => path.join(ROOT, 'engine', f));
+  return e.concat([path.join(ROOT, 'compose', 'composer.js'), path.join(ROOT, 'compose', 'bank.js'), path.join(ROOT, 'compose', 'preset_gain.js'), path.join(ROOT, 'compose', 'part_ref.js'), path.join(ROOT, 'compose', 'model_params.js'), path.join(ROOT, 'compose', 'spec.js')]); }
+function load(extra) { // wrapped in a function scope: top-level declarations become locals (vm global lookups are slow)
+  const src = files().map((f) => fs.readFileSync(f, 'utf8')).join('\n') + '\n' + (extra || '');
+  const wrapped = '(function(){\n' + src + '\n;const __x = { ' + EXPORTS.join(',') + ' }; if (typeof __prof !== "undefined") __x.__prof = __prof; return __x; })()';
+  return new Function('performance', 'return ' + wrapped)(performance); }
+const EXPORTS = ['DeckFX', 'FX_NAMES', 'FX_BEATS', 'PERC_KINDS', 'BANK_GAIN', 'genDrumBank', 'drumBank', 'BankPlayer', 'BANK_FAMILIES', 'BANK_VOICES', 'BANK_FOR_GENRE', 'DRUMBANKS', 'planNext', 'SET_ENERGY', 'JOURNEY_NEXT', 'SOUND_BANK', 'MODEL_DEAD', 'TruePeak', 'Limiter', 'WV', 'wasmVoiceInit', 'Synth', 'noiseSeed', 'presetKit', 'lintScore', 'spellFor', 'validateSpec', 'compileSpec', 'exportSpec', 'parseMelody', 'melodyToText', 'trackTrim', 'analyseTrack', 'peakSectionOf', 'LAYERS', 'FORMS', 'Engine', 'warmUp', 'Deck', 'DeckMix', 'Master', 'Loudness', 'Fx', 'Texture', 'NCH', 'BAL_DEFAULT', 'softClip', 'composeTrack', 'planTrack', 'GENRES', 'GENRE_BY_ID', 'CH', 'CH_NAMES', 'Kick', 'Snare', 'Hats', 'Perc', 'Synth', 'Limiter', 'Reverb', 'PingPong', 'Comp', 'Biquad', 'Svf', 'mtof', 'rng', 'paletteFor', 'paletteSounds', 'SOUND_BANK', 'contextMatch', 'deriveContract', 'PALETTE', 'refineLevels', 'partProbe', 'noiseSeed', 'PitchShift', 'HarmonicEcho', 'ChordResonator', 'Shimmer', 'MotionInsert'];
+module.exports = { load, files, EXPORTS };

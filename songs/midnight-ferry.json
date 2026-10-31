@@ -1,0 +1,30 @@
+{
+ "forge": 1,
+ "title": "Midnight Ferry",
+ "genre": "melodic-techno",
+ "seed": 2026,
+ "bpm": 124, "key": "F", "mode": "minor",
+ "harmony": { "progression": ["i", "bVI", "bIII", "bVII"], "barsPerChord": 2, "extension": "add9" },
+ "drums": {
+  "patterns": {
+   "A": { "kick": "X...X...X...X...", "snare": "....x.......x...", "closed": "gxgxgxgxgxgxgxgx", "open": "..x...x...x...x." },
+   "B": { "kick": "X...X...X...X...|X...X...X...X.g.", "snare": "....x.......x...", "closed": "gxxxgxxxgxxxgxxx", "open": "..x...x...x...x.", "ride": "..g...g...g...g.",
+          "perc": [ { "kind": "tom", "note": 45, "steps": "................|..........g...g." } ] }
+  },
+  "fill": ["............xxxx", "..........x.xxXX"]
+ },
+ "bass": { "patterns": { "A": ".RRR.RRR.RRR.RRR", "B": ".RRO.RRR.RRF.RRR|.RRO.RRR.RRO.RRA" }, "gate": 0.6 },
+ "lead": { "role": "hook", "range": [62, 84] },
+ "sound": { "lead": { "cut": 1500, "aDec": 0.45, "aSus": 0.25, "aRel": 0.3 }, "perc": { "gain": 0.4 }, "hats": { "gain": 1.5 } },
+ "form": [
+  { "section": "intro",  "bars": 16, "layer": "drums1", "drums": "A", "bass": "A" },
+  { "section": "groove", "bars": 16, "drums": "A", "bass": "A" },
+  { "section": "break",  "bars": 16, "progression": ["bVI", "bVII", "i", "i"],
+    "melody": "Db5 - - - - - - - C5 - - - - - - - | Ab4 - - - - - - - . . . . . . . . | Eb5 - - - - - - - Db5 - - - - - - - | Bb4 - - - - - - - - - - - . . . . | C5 - - - - - - - Ab4 - - - - - - - | F4 - - - - - - - - - - - . . . . | G4 - - - Ab4 - - - C5 - - - Eb5 - - - | F5 - - - - - - - - - - - . . . ." },
+  { "section": "build",  "bars": 8 },
+  { "section": "drop",   "bars": 32, "drums": ["B"], "bass": ["B", "A"],
+    "melody": "C5 - - Ab4 . . C5 - Eb5 - - . C5 - Bb4 . | Ab4 - - - - - . . F4 - G4 - Ab4 - C5 - | Db5 - - Ab4 . . Db5 - F5 - - . Eb5 - Db5 . | C5 - - - - - . . Ab4 - Bb4 - C5 - Db5 - | Eb5 - - C5 . . Eb5 - Ab5 - - . G5 - Eb5 . | C5 - - - - - . . Ab4 - Bb4 - C5 - Eb5 - | G5 - - Eb5 . . Bb4 - Eb5 - - . F5 - G5 . | Bb4 - - - - - - - . . . . C5 - - -" },
+  { "section": "groove", "bars": 16, "layer": "groove2", "drums": "B", "bass": "A" },
+  { "section": "outro",  "bars": 16, "drums": "A", "bass": "A" }
+ ]
+}
