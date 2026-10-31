@@ -1,8 +1,11 @@
 # Builds the FORGE Android app (a WebView around the web build) on every push and on demand: Actions → "Android APK" → Run.
-# The APK (debug-signed, installable by sideloading) is attached to the run as the artifact "FORGE-apk".
+# The APK (debug-signed, installable by sideloading) is attached to the run as the artifact "FORGE-apk", and published on the
+# repository's Releases page under the fixed tag "latest-apk" (one release, replaced on every build) — a link that does not change:
+#   https://github.com/<owner>/<repo>/releases/tag/latest-apk — the file itself: …/releases/download/latest-apk/FORGE.apk (plus FORGE.html, the web build).
 # GitHub's Ubuntu runners ship the Android SDK (ANDROID_HOME); no SDK set-up step is needed.
 name: Android APK
 on: { push: { branches: [main] }, workflow_dispatch: {} }
+permissions: { contents: write }
 jobs:
   apk:
     runs-on: ubuntu-24.04
@@ -18,5 +21,13 @@ jobs:
         with: { gradle-version: '8.7' }
       - run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties && ls "$ANDROID_HOME/platforms" | tail -3
       - run: gradle -p android assembleDebug --no-daemon --stacktrace
+      - run: cp android/app/build/outputs/apk/debug/app-debug.apk FORGE.apk && ls -la FORGE.apk dist/FORGE.html 2>/dev/null || ls -la FORGE.apk
       - uses: actions/upload-artifact@v4
         with: { name: FORGE-apk, path: android/app/build/outputs/apk/debug/app-debug.apk }
+      - name: Publish on the Releases page (tag latest-apk, replaced each build)
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          V=$(node -p "require('./package.json').version")
+          FILES="FORGE.apk"; [ -f dist/FORGE.html ] && FILES="$FILES dist/FORGE.html"
+          gh release delete latest-apk --yes --cleanup-tag 2>/dev/null || true
+          gh release create latest-apk $FILES --title "FORGE $V — latest Android build" --notes "Debug-signed APK of FORGE $V built from ${GITHUB_SHA::7} on $(date -u +%Y-%m-%d). Install: download FORGE.apk on the phone, allow installing from this source, open it."

@@ -246,16 +246,16 @@ function zipBlob(files) { const out = [], cen = []; let off = 0; const enc = new
   return new Blob(out.concat(cen, [new Uint8Array(end.buffer)]), { type: 'application/zip' }); }
 // a file for the person to keep: saveFile (perform.js) uses the viewer's Downloads capability inside a Claude page (a plain <a download> is inert there) and makes an ordinary download everywhere else
 function saveBlob(blob, name) { return saveFile(name, blob); }
-async function exportTrack(i, stems) { const D = decks[i], s = D.score; if (!s) { toast('Load a track into this deck first'); return null; } if (D.exporting) return null; D.exporting = true;
+async function exportTrack(i, stems, format) { format = format || 'wav'; const D = decks[i], s = D.score; if (!s) { toast('Load a track into this deck first'); return null; } if (D.exporting) return null; D.exporting = true;
   try { const base = `FORGE-${String(s.meta.name).replace(/[^A-Za-z0-9]+/g, '-')}-${PCN[s.meta.key].replace('#', 's')}${s.meta.mode === 'minor' ? 'm' : ''}-${Math.round(s.meta.bpm)}bpm`; // (v9.2: inside the try — a title that broke here left the deck "exporting" for the whole session)
-  toast(`Rendering ${s.meta.name}${stems ? ' + stems' : ''}… (in the background — keep playing)`, 60000, true);
-  const msg = { type: 'bounce', score: { meta: s.meta, sections: s.sections, kits: s.kits, mix: s.mix, roles: s.roles, ev: s.ev }, cal: cal(s.meta.gid), sr: 44100, stems: !!stems, levelDb: outLevel() };
+  const ext = format === 'mp3' ? 'mp3' : 'wav', mime = format === 'mp3' ? 'audio/mpeg' : 'audio/wav'; toast(`Rendering ${s.meta.name}${stems ? ' + stems' : ''} as ${format === 'mp3' ? 'MP3 320' : 'WAV 24-bit'}… (in the background — keep playing)`, 60000, true);
+  const msg = { type: 'bounce', score: { meta: s.meta, sections: s.sections, kits: s.kits, mix: s.mix, roles: s.roles, ev: s.ev }, cal: cal(s.meta.gid), sr: 44100, stems: !!stems, levelDb: outLevel(), format };
     // each finished file arrives on its own (the mix, then every stem) and goes straight into the browser's blob store: the page never
     // holds all of a stems export's audio at once
-    const files = [], took = (x) => files.push({ name: `${base}-${x.name}.wav`, blob: new Blob([x.head, new Uint8Array(x.data.buffer, x.data.byteOffset, x.data.byteLength)], { type: 'audio/wav' }), crc: x.crc });
+    const files = [], took = (x) => files.push({ name: `${base}-${x.name}.${x.kind === 'mp3' ? 'mp3' : 'wav'}`, blob: new Blob([x.head, new Uint8Array(x.data.buffer, x.data.byteOffset, x.data.byteLength)], { type: x.kind === 'mp3' ? 'audio/mpeg' : 'audio/wav' }), crc: x.crc });
     const p = offThread(msg, (f) => toast(`Rendering ${s.meta.name}${stems ? ' + stems' : ''}: ${Math.round(f * 100)} %`, 60000, true), took); if (!p) { toast('Export needs a worker thread (not available here)'); return null; }
-    const r = await p; if (r.mix) took({ name: 'mix', head: wavHeader(r.mix.byteLength, r.sr, false), data: r.mix, crc: crc32(wavBlob(r.mix, r.sr)) }); if (r.stems) for (const x of r.stems) took({ name: x.name, head: wavHeader(x.data.byteLength, r.sr, true), data: x.data, crc: crc32(wavBlob(x.data, r.sr)) });
-    const want = base + (stems ? '-stems.zip' : '.wav'), mixF = files.find((f) => /-mix\.wav$/.test(f.name));
+    const r = await p; if (r.mix) { const k = r.mixKind, head = k === 'mp3' ? new Uint8Array(0) : wavHeader(r.mix.byteLength, r.sr, k); took({ name: 'mix', head, kind: k === 'mp3' ? 'mp3' : 'wav', data: r.mix, crc: crc32([head, new Uint8Array(r.mix.buffer, r.mix.byteOffset, r.mix.byteLength)]) }); } if (r.stems) for (const x of r.stems) { const head = x.kind === 'mp3' ? new Uint8Array(0) : wavHeader(x.data.byteLength, r.sr, true); took({ name: x.name, head, kind: x.kind === 'mp3' ? 'mp3' : 'wav', data: x.data, crc: crc32([head, new Uint8Array(x.data.buffer, x.data.byteOffset, x.data.byteLength)]) }); }
+    const want = base + (stems ? '-stems.zip' : '.' + ext), mixF = files.find((f) => /-mix\.(wav|mp3)$/.test(f.name));
     if (!mixF || (stems && files.length !== 1 + BOUNCE_STEMS.length)) throw new Error('the render came back incomplete');
     const saved = stems ? await saveBlob(zipBlob(files), want) : await saveBlob(mixF.blob, want);
     // saved = the name it was saved under, false = the person declined, null = it could not be saved (saveFile has said why). A Claude page cannot save a .wav: it comes inside a .zip
@@ -263,9 +263,12 @@ async function exportTrack(i, stems) { const D = decks[i], s = D.score; if (!s) 
   catch (e) { toast('Export failed: ' + e.message); return null; } finally { D.exporting = false; } }
 async function compileAsync(spec, opts) { const p = offThread({ type: 'compile', spec, opts: opts || {} }); if (!p) return compileSpec(spec, opts); try { return await p; } catch (e) { if (/timeout|failed/.test(e.message) && !e.validation) return compileSpec(spec, opts); throw e; } }
 async function composeTrackAsync(gid, seed, opt) { requestBank(BANK_FOR_GENRE[gid]); const p = offThread({ type: 'compose', gid, seed, opt: opt || {} }); if (!p) return composeTrack(gid, seed, opt); try { return await p; } catch (e) { return composeTrack(gid, seed, opt); } }
-async function composeAsync(gid, opt) { opt = opt || {}; const seed = opt.seed || (Math.random() * 2 ** 31) >>> 0, snd = paletteSounds(gid, seed);
+// (v9.4) how long a new track is: Radio (about half), Club (the default: 6–8 minutes for house and techno), Extended (about 1.4×)
+const TRACK_LENS = [['radio', 'Radio', 'about 3–4 minutes'], ['club', 'Club', 'the club length — 6–8 minutes for house and techno'], ['extended', 'Extended', 'longer intros, more acts — 9–11 minutes']];
+const TRACK_LEN = { v: (() => { try { const x = localStorage.getItem('forge.len'); return ['radio', 'club', 'extended'].includes(x) ? x : 'club'; } catch (e) { return 'club'; } })() };
+async function composeAsync(gid, opt) { opt = opt || {}; if (!opt.length) opt.length = TRACK_LEN.v; const seed = opt.seed || (Math.random() * 2 ** 31) >>> 0, snd = paletteSounds(gid, seed);
   if (!Object.keys(snd).length || opt.palette === false) return composeTrackAsync(gid, seed, opt);
-  const spec = { forge: 1, genre: gid, seed, sound: snd }; if (opt.key != null) spec.key = PCN[opt.key];
+  const spec = { forge: 1, genre: gid, seed, sound: snd, length: opt.length }; if (opt.key != null) spec.key = PCN[opt.key];
   try { return await compileAsync(spec, { fastLevels: true }); } catch (e) { return composeTrackAsync(gid, seed, opt); } }
 // ---- ONE LOAD POLICY (v9.2): a deck on air — playing, or part of a mix that is armed or running — is never replaced. Measured on
 // 9.1: the Perform view's "Next track → Load" and the Score tab's "Load as a new track" replaced the only playing deck (the set went
@@ -402,7 +405,7 @@ function buildDeck(i) {
   el.innerHTML = `<div class="dhead"><div class="dtag">${'AB'[i]}</div><div class="dtitle"><h2>Empty deck</h2><div class="dmeta"></div></div><span class="dstate">stopped</span></div>
     <div class="dempty"><p>Nothing on this deck yet. Pick a genre — it composes a new track — or choose one in the library below.</p><div class="chips">${['deep-house', 'techno', 'melodic-techno', 'trance', 'dnb', 'progressive-house', 'afro-house', 'downtempo'].map((g) => `<button class="btn" data-quick="${g}">${(GENRE_BY_ID[g] || { name: g }).name}</button>`).join('')}</div></div>
     <canvas class="map" height="118" aria-label="Arrangement map: click a section to jump"></canvas>
-    <div class="row"><button class="btn big play" data-act="play">Play</button><button class="btn" data-act="mix" title="Mix this deck into the other one on the next phrase">Mix in</button><button class="btn" data-act="reroll" title="New melodies and patterns from the next bar">New variation</button><button class="btn" data-export="wav" title="Render the whole track to a WAV file — in the background, faster than real time">WAV</button><button class="btn" data-export="stems" title="The mix + five stems (drums, bass, chords+pad, lead+arp, fx) as WAV files in one zip — ready for a DAW">Stems</button>
+    <div class="row"><button class="btn big play" data-act="play">Play</button><button class="btn" data-act="mix" title="Mix this deck into the other one on the next phrase">Mix in</button><button class="btn" data-act="reroll" title="New melodies and patterns from the next bar">New variation</button><button class="btn" data-export="mp3" title="Render the whole track to an MP3 (320 kbit/s, joint stereo) — FORGE's own encoder, in the background">MP3</button><button class="btn" data-export="wav" title="Render the whole track to a 24-bit WAV file — in the background, faster than real time">WAV</button><button class="btn" data-export="stems" title="The mix + five stems (drums, bass, chords+pad, lead+arp, fx) as WAV files in one zip — ready for a DAW">Stems</button>
       <span class="loopgrp"><span class="sep"></span><span class="lbl">Loop</span>${[4, 8, 16].map((l) => `<button class="btn loopb" data-l="${l}">${l}</button>`).join('')}</span></div>
     <div class="row jumps"></div>
     <div class="row ctl"><span class="lbl">Mood</span><select class="btn cmood" aria-label="Mood"><option value="">Genre</option>${Object.keys(MOODS).map((m) => `<option value="${m}">${m[0].toUpperCase() + m.slice(1)}</option>`).join('')}</select>
@@ -414,7 +417,7 @@ function buildDeck(i) {
     <div class="stems"></div><div class="note dna"></div>`;
   $$('[data-quick]', el).forEach((b) => b.onclick = async () => { await startAudio(); loadDeck(i, b.dataset.quick, { play: !decks[i ^ 1].playing }); });
   $('[data-act=play]', el).onclick = () => playPause(i);
-  $$('[data-export]', el).forEach((b) => b.onclick = () => exportTrack(i, b.dataset.export === 'stems'));
+  $$('[data-export]', el).forEach((b) => b.onclick = () => exportTrack(i, b.dataset.export === 'stems' || b.dataset.export === 'stems-mp3', /mp3/.test(b.dataset.export) ? 'mp3' : 'wav'));
   $('[data-act=mix]', el).onclick = async () => { await startAudio(); const D = decks[i]; if (!D.score) { toast('Load a genre into this deck first'); return; } if (!decks[i ^ 1].playing) { playPause(i); return; } mixInto(i); };
   $('[data-act=reroll]', el).onclick = () => reroll(i);
   $('.cmood', el).onchange = (e) => setMood(i, e.target.value);

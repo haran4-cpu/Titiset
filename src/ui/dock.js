@@ -107,7 +107,7 @@ function dknob(parent, o) { // o: label, min, max, curve, unit, value, def, onch
   const l = document.createElement('span'); l.className = 'dk-kl'; l.textContent = o.label; w.append(c, l, val); draw(); parent.appendChild(w); return w; }
 function knobRow(parent, slot, list) { const row = document.createElement('div'); row.className = 'dk-knobs'; parent.appendChild(row);
   if (slot === 'snare') { const used = snareKinds(); list = [...(used.snare ? P_DRUM.snare.slice(0, 3) : []), ...(used.clap ? P_CLAP.slice(0, 3) : []), ...(used.rim ? P_RIM.slice(0, 1) : []), ['gain', 'Level', 0, 1.5]]; } // the knobs of what the track really hits on the snare channel (snare body / clap / rim — one score can use all three)
-  if (!P_DRUM[slot]) { const md = kitVal(slot, 'model'), dead = X_LABEL[md] ? xDead(slot, md) : MODEL_DEAD[md] || []; // only the knobs this model uses (measured: tools/model_params.cjs); a model with no filter of its own gets Tone in place of Cutoff
+  if (!P_DRUM[slot]) { const md = kitVal(slot, 'model'), dead = X_LABEL[md] ? knobsHidden({ model: md, flt: kitVal(slot, 'flt') }) : MODEL_DEAD[md] || []; // only the knobs this model uses (measured: tools/model_params.cjs); a model with no filter of its own gets Tone in place of Cutoff
     list = list.map((p) => (p[0] === 'cut' && TONE_MODELS.includes(md) ? ['tone', 'Tone', 0, 1, 'lin', ''] : p)).filter((p) => !dead.includes(p[0])); }
   for (const p of list) { let [k, label, mn, mx, curve, unit] = p; if (slot === 'kick' && k === 'len' && !(kitVal('kick', 'len') > 0)) { k = 'aDec'; label = 'Decay'; mn = 0.05; mx = 1; curve = 'log'; unit = 's'; }
     const v = kitVal(slot, k); dknob(row, { label, min: mn, max: mx, curve, unit, value: v == null ? mn : v, def: v, onchange: (x) => liveKit(slot, k, x) }); } return row; }
@@ -136,9 +136,6 @@ const X_KNOBS = { fm4: [['r2', 'Ratio 2', 0.5, 16, 'log'], ['i2', 'Index 2', 0, 
 function xCharacter(slot) { const md = kitVal(slot, 'model'); if (!X_LABEL[md]) return ''; const a = X_SEG[md], b = X_SEG2[md];
   return `<div class="dk-wt dk-x"><span class="lbl">Character</span>${a ? seg(a[1], a[2], kitVal(slot, a[0]) || 0, `data-xk="${a[0]}" data-xv`) : ''}${b ? seg(b[1], b[2], kitVal(slot, b[0]) || 0, `data-xk="${b[0]}" data-xv`) : ''}
     <span class="lbl">Filter</span>${seg('Filter type', X_FILTERS, kitVal(slot, 'flt') ?? -1, 'data-xk="flt" data-xv')}<span class="lbl">Drive</span>${seg('Drive type', X_DRIVES, kitVal(slot, 'dtype') || 0, 'data-xk="dtype" data-xv')}</div><div class="dk-xknobs"></div>`; }
-// an engine's filter knobs live or die with its filter type (Auto: none on the plucked, struck, additive and granular engines)
-function xDead(slot, md) { const f = kitVal(slot, 'flt'), on = f > 0 || (f < 0 && !['pluck2', 'modal', 'add', 'grain'].includes(md)), F = ['cut', 'res', 'envAmt', 'fDec'], d = (MODEL_DEAD[md] || []).filter((k) => !F.includes(k));
-  return on ? d : d.concat(F); }
 function xKnobs(slot) { const md = kitVal(slot, 'model'), L = (X_KNOBS[md] || []).slice(), f = kitVal(slot, 'flt'); if (f === 4) L.push(['fmorph', 'Morph', 0, 1]); if (f === 7) L.push(['vow', 'Vowel', 0, 4], ['vowLfo', 'Vowel LFO', 0, 2]);
   if (kitVal(slot, 'dtype') > 0) L.push(['drv', 'Drive', 0, 1]); L.push(['stereo', 'Stereo', 0, 1]); return L; }
 function seg(name, opts, cur, attr) { return `<div class="dk-seg" role="group" aria-label="${name}">${opts.map(([v, l]) => `<button class="${String(v) === String(cur) ? 'on' : ''}" ${attr}="${esc(v)}">${esc(l)}</button>`).join('')}</div>`; }
@@ -392,9 +389,13 @@ const P_WT = [['pos', 'Position', 0, 1], ['posEnv', 'Pos env', 0, 1], ['posLfo',
 const WT_FILTERS = [[0, 'Ladder'], [1, 'Band'], [2, 'High'], [3, 'Vowel'], [4, 'Comb']];
 function padUsed(s) { const ev = s.ev; for (let k = 0; k < ev.n; k++) if (ev.ch[k] === 6) return true; return false; }
 function presetGrid(slot, gid) { const bank = SOUND_BANK[slot]; if (!bank) return ''; const D = decks[DOCK.deck], cur = D.spec && D.spec.sound && D.spec.sound[slot] && D.spec.sound[slot].preset || '', pal = (paletteFor(gid)[slot] || []);
-  const card = (k) => { const p = bank[k], short = (p.d.split(' — ')[1] || p.d).slice(0, 60); return `<button class="dk-pcard${k === cur ? ' on' : ''}${pal.includes(k) ? ' fit' : ''}" data-pset="${k}" title="${esc(p.d)}"><b>${pal.includes(k) ? '★ ' : ''}${esc(p.label)}</b><small>${esc(short)}</small>${p.k && p.k.model === 'wt' ? '<i>wavetable</i>' : ''}</button>`; };
-  const rest = Object.keys(bank).filter((k) => !pal.includes(k));
-  return `<div class="dk-pgrid"><button class="dk-pcard${cur ? '' : ' on'}" data-pset=""><b>Genre sound</b><small>the genre's own ${slot}</small></button>${pal.map(card).join('')}${rest.map(card).join('')}</div>`; }
+  const card = (k) => { const p = bank[k], short = (p.d.split(' — ')[1] || p.d).slice(0, 60), tg = p.tags || [], md = p.k && p.k.model; return `<button class="dk-pcard${k === cur ? ' on' : ''}${pal.includes(k) ? ' fit' : ''}" data-pset="${k}" data-tags="${esc(tg.join(' ') + (pal.includes(k) ? ' fits' : '') + (p.v94 ? ' new' : ''))}" title="${esc(p.d)}"><b>${pal.includes(k) ? '★ ' : ''}${esc(p.label)}</b><small>${esc(short)}</small>${md === 'wt' ? '<i>wavetable</i>' : X_LABEL[md] ? `<i>${esc(X_LABEL[md])}</i>` : ''}${tg.length ? `<em>${esc(tg.slice(0, 3).join(' · '))}</em>` : ''}</button>`; };
+  const rest = Object.keys(bank).filter((k) => !pal.includes(k)), cnt = {}; for (const k of Object.keys(bank)) for (const t of bank[k].tags || []) cnt[t] = (cnt[t] || 0) + 1;
+  const tags = Object.keys(cnt).sort((x, y) => cnt[y] - cnt[x]).slice(0, 14), f = (DOCK.tagF || {})[slot] || ''; /* (v9.4) the sound browser: filter the bank by character */
+  const chips = `<div class="dk-tagf" role="group" aria-label="Filter the ${slot} sounds by character"><button data-tagf="" class="${f ? '' : 'on'}">All ${Object.keys(bank).length}</button>${pal.length ? `<button data-tagf="fits" class="${f === 'fits' ? 'on' : ''}">★ fits this genre</button>` : ''}<button data-tagf="new" class="${f === 'new' ? 'on' : ''}">new in 9.4</button>${tags.map((t) => `<button data-tagf="${esc(t)}" class="${f === t ? 'on' : ''}">${esc(t)}</button>`).join('')}</div>`;
+  return `${chips}<div class="dk-pgrid" data-slot="${slot}"><button class="dk-pcard${cur ? '' : ' on'}" data-pset="" data-tags="all"><b>Genre sound</b><small>the genre's own ${slot}</small></button>${pal.map(card).join('')}${rest.map(card).join('')}</div>`; }
+function filterPresetGrid(body, slot) { const f = (DOCK.tagF || {})[slot] || ''; $$('.dk-pgrid [data-pset]', body).forEach((c) => { c.hidden = !!f && c.dataset.pset !== '' && !(c.dataset.tags || '').split(' ').includes(f); });
+  $$('[data-tagf]', body).forEach((b) => { b.classList.toggle('on', b.dataset.tagf === f); b.onclick = () => { (DOCK.tagF || (DOCK.tagF = {}))[slot] = b.dataset.tagf; filterPresetGrid(body, slot); }; }); }
 function wirePresetGrid(body, slot, grid) { $$('[data-pset]', grid || body).forEach((b) => b.onclick = () => { const val = b.dataset.pset; edit((s) => { if (!val) { if (s.sound) delete s.sound[slot]; } else (s.sound || (s.sound = {}))[slot] = { preset: val }; if (s.sound && !Object.keys(s.sound).length) delete s.sound; }, 1, true);
     toast(val ? `${slot}: ${SOUND_BANK[slot][val].label} from the next bar — ${SOUND_BANK[slot][val].d}` : `${slot}: back to the genre sound`); }); }
 function renderSound(body, f, only) {
@@ -407,7 +408,7 @@ function renderSound(body, f, only) {
   // synthesized voice's knobs would do nothing there, so they appear only for the synth voice (Synth (9.2), or a sound picked below)
   const fam = (f.D.spec.sound && f.D.spec.sound.drums && f.D.spec.sound.drums.family) || BANK_FOR_GENRE[f.D.gid] || 'forge', famOn = drum && slot !== 'kick' && fam !== 'forge' && !(f.D.spec.sound && f.D.spec.sound[slot] && f.D.spec.sound[slot].preset);
   if (famOn) $('.dk-soundknobs', body).innerHTML = `<p class="dk-legend">The ${slot} plays the ${fam}-style kit: shape it with Tune, Decay, Tone and Snap above. Pick a sound below to play a synthesized ${slot} instead.</p>`; else knobRow($('.dk-soundknobs', body), slot, drum ? P_DRUM[slot] : P_SYN);
-  wireModel(body); wirePresetGrid(body, slot);
+  wireModel(body); wirePresetGrid(body, slot); filterPresetGrid(body, slot);
   const xk = $('.dk-xknobs', body); if (xk) { knobRow(xk, slot, xKnobs(slot)); $$('[data-xk]', body).forEach((b) => b.onclick = () => { liveKit(slot, b.dataset.xk, +b.dataset.xv); renderDock(); }); }
   const wk = $('.dk-wtknobs', body); if (wk) { knobRow(wk, slot, P_WT); $$('[data-wtt]', body).forEach((b) => b.onclick = () => { liveKit(slot, 'table', +b.dataset.wtt); renderDock(); }); $$('[data-wtf]', body).forEach((b) => b.onclick = () => { liveKit(slot, 'ftype', +b.dataset.wtf); renderDock(); }); }
   $$('[data-slot]', body).forEach((b) => b.onclick = () => { DOCK.slot = b.dataset.slot; renderDock(); });

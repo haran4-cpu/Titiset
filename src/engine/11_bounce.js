@@ -11,23 +11,24 @@
    Master.runReplay): the stems sum to the mix. They are 32-bit float WAVs (nothing can clip), each handed over as soon as it is
    done (a stem is ~90 MB for a 4-minute track: they are never all held at once). */
 const BOUNCE_STEMS = [['drums', [0, 1, 2, 3]], ['bass', [4]], ['chords-pad', [5, 6]], ['lead-arp', [7, 8]], ['fx', [9, 10]]];
-// a WAV header (44 bytes): 16-bit PCM, or 32-bit IEEE float (format 3) for the stems
-function wavHeader(bytes, sr, float) { const h = new DataView(new ArrayBuffer(44)), w = (o, s) => { for (let i = 0; i < 4; i++) h.setUint8(o + i, s.charCodeAt(i)); }, bps = float ? 4 : 2;
+// a WAV header (44 bytes): 16-bit PCM, 24-bit PCM (kind 24, v9.4) or 32-bit IEEE float (format 3) for the stems
+function wavHeader(bytes, sr, float) { const h = new DataView(new ArrayBuffer(44)), w = (o, s) => { for (let i = 0; i < 4; i++) h.setUint8(o + i, s.charCodeAt(i)); }, bps = float === 24 ? 3 : float ? 4 : 2; if (float === 24) float = false;
   w(0, 'RIFF'); h.setUint32(4, 36 + bytes, true); w(8, 'WAVE'); w(12, 'fmt '); h.setUint32(16, 16, true); h.setUint16(20, float ? 3 : 1, true); h.setUint16(22, 2, true); h.setUint32(24, sr, true); h.setUint32(28, sr * 2 * bps, true); h.setUint16(32, 2 * bps, true); h.setUint16(34, bps * 8, true); w(36, 'data'); h.setUint32(40, bytes, true);
   return new Uint8Array(h.buffer); }
 const CRC_TAB = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
 function crc32Of(parts) { let c = 0xFFFFFFFF; for (const p of parts) for (let i = 0; i < p.length; i++) c = CRC_TAB[(c ^ p[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
 // one file of the export: its WAV header, its samples and the zip CRC of both (computed here, off the page's thread)
-async function bouncePart(name, data, sr, float) { const bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength), head = wavHeader(data.byteLength, sr, float);
-  let c = 0xFFFFFFFF; for (let i = 0; i < 44; i++) c = CRC_TAB[(c ^ head[i]) & 255] ^ (c >>> 8);
+async function bouncePart(name, data, sr, float) { const bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength), head = float === 'mp3' ? new Uint8Array(0) : wavHeader(data.byteLength, sr, float); // (v9.4: an MP3 is its own container)
+  let c = 0xFFFFFFFF; for (let i = 0; i < head.length; i++) c = CRC_TAB[(c ^ head[i]) & 255] ^ (c >>> 8);
   for (let o = 0; o < bytes.length; o += 1 << 20) { const e = Math.min(bytes.length, o + (1 << 20)); for (let i = o; i < e; i++) c = CRC_TAB[(c ^ bytes[i]) & 255] ^ (c >>> 8); await paced(); }
-  return { name, head, data, crc: (c ^ 0xFFFFFFFF) >>> 0, float: !!float }; }
+  return { name, head, data, crc: (c ^ 0xFFFFFFFF) >>> 0, float: float === true, kind: float === 'mp3' ? 'mp3' : float === 24 ? 'wav24' : float ? 'wavf' : 'wav16' }; }
 // emit(part): called for each finished file (the mix first, then the stems); without it the stems come back in the result
 async function bounceTrack(m, progress, emit) { ECO.exactN++; ECO.exact = true; try { return await bounceRun(m, progress, emit); } finally { ECO.exactN = Math.max(0, ECO.exactN - 1); ECO.exact = ECO.exactN > 0; } } // (v9.2) no idle shortcuts while exporting: an effect fed by two stems idled in a pass that had only one of them, and came back with its delay line and LFO elsewhere (techno: the stems were 23 dB off the mix). Counted (review): with two exports at once, one per deck, the first to finish switched the flag off under the other, whose stems then missed the mix by 28 dB instead of 74
-async function bounceRun(m, progress, emit) { const sr = m.sr || 44100, s = m.score, wantStems = !!m.stems, passes = wantStems ? 1 + BOUNCE_STEMS.length : 1; // async: it renders minutes of audio — paced (10_analysis.js) so a set keeps playing while it exports
+// (v9.4) m.format: 'wav' (24-bit PCM, TPDF dither at the 24th bit; stems 32-bit float), 'wav16' (the 9.3 file), 'mp3' (320 kbit/s joint stereo; stems too)
+async function bounceRun(m, progress, emit) { const sr = m.sr || 44100, s = m.score, wantStems = !!m.stems, passes = wantStems ? 1 + BOUNCE_STEMS.length : 1, fmt = m.format || 'wav16'; // async: it renders minutes of audio — paced (10_analysis.js) so a set keeps playing while it exports
   let trim = null; if (m.cal) { try { const t = await trackTrimAsync(s, m.cal, sr); trim = Math.pow(10, t.trimDb / 20); } catch (e) { /* no trim: the calibrated level */ } }
   const sps = sr * 60 / s.meta.bpm / 4, body = Math.round(s.meta.bars * 16 * sps), N = body + Math.round(sr * 4), K = (N >> 3) + 24;
-  const q16 = (x) => { const v = Math.round(x * 32767 + (Math.random() - Math.random())); return v > 32767 ? 32767 : v < -32768 ? -32768 : v; };
+  const q16 = (x) => { const v = Math.round(x * 32767 + (Math.random() - Math.random())); return v > 32767 ? 32767 : v < -32768 ? -32768 : v; }, q24 = (x) => { const v = Math.round(x * 8388607 + (Math.random() - Math.random())); return v > 8388607 ? 8388607 : v < -8388608 ? -8388608 : v; };
   const g1 = wantStems ? new Float32Array(K) : null, g2 = wantStems ? new Float32Array(K) : null, L = new Float32Array(128), R = new Float32Array(128);
   const clip = { n: 0, at: new Int32Array(4096), l: new Float32Array(4096), r: new Float32Array(4096) }; // where the master's soft clip shaped the mix, and by how much (sparse)
   const res = { sr, frames: N, seconds: N / sr, peakDb: -120, lufs: null, mix: null, stems: wantStems && !emit ? [] : null };
@@ -40,13 +41,16 @@ async function bounceRun(m, progress, emit) { const sr = m.sr || 44100, s = m.sc
     const grp = pass ? BOUNCE_STEMS[pass - 1][1] : null; if (grp) for (let c = 0; c < NCH; c++) if (!grp.includes(c)) { const st = D.mix.s[c]; st.mute = 1; st.gs = st.gp = 0; }
     if (!pass && wantStems) M.cap = { g: new Float32Array(128), l: new Float32Array(128), g1, g2, t: 0, clipAt: (j, a, b) => { if (clip.n === clip.at.length) { const k = clip.n * 2, x = new Int32Array(k), y = new Float32Array(k), z = new Float32Array(k); x.set(clip.at); y.set(clip.l); z.set(clip.r); clip.at = x; clip.l = y; clip.r = z; } clip.at[clip.n] = j; clip.l[clip.n] = a; clip.r[clip.n] = b; clip.n++; } };
     if (pass) M.rep = { g1, g2, clip, ck: 0, t: 0, w: 0, ql: new Float32Array(M.lim.DL), qr: new Float32Array(M.lim.DL) };
-    const out = pass ? new Float32Array(N * 2) : new Int16Array(N * 2); let done = 0, next = 0, peak = 0;
+    const enc = fmt === 'mp3' ? mp3Encoder(sr, 2, m.kbps || 320) : null, w24 = fmt === 'wav' && !pass;
+    const out = enc ? null : pass ? new Float32Array(N * 2) : w24 ? new Uint8Array(N * 6) : new Int16Array(N * 2); let done = 0, next = 0, peak = 0;
     while (done < N) { const n = Math.min(128, N - done); D.process(128); if (pass) M.runReplay([D.mix], 1, L, R, 128); else M.run([D.mix], 1, L, R, 128);
-      if (pass) for (let i = 0; i < n; i++) { const k = (done + i) * 2; out[k] = L[i]; out[k + 1] = R[i]; const a = Math.max(Math.abs(L[i]), Math.abs(R[i])); if (a > peak) peak = a; }
+      if (enc) { enc.push(L, R, n); for (let i = 0; i < n; i++) { const a = Math.max(Math.abs(L[i]), Math.abs(R[i])); if (a > peak) peak = a; } }
+      else if (w24) for (let i = 0; i < n; i++) { const k = (done + i) * 6, a0 = q24(L[i]), b0 = q24(R[i]); out[k] = a0 & 255; out[k + 1] = (a0 >> 8) & 255; out[k + 2] = (a0 >> 16) & 255; out[k + 3] = b0 & 255; out[k + 4] = (b0 >> 8) & 255; out[k + 5] = (b0 >> 16) & 255; const a = Math.max(Math.abs(L[i]), Math.abs(R[i])); if (a > peak) peak = a; }
+      else if (pass) for (let i = 0; i < n; i++) { const k = (done + i) * 2; out[k] = L[i]; out[k + 1] = R[i]; const a = Math.max(Math.abs(L[i]), Math.abs(R[i])); if (a > peak) peak = a; }
       else for (let i = 0; i < n; i++) { const k = (done + i) * 2; out[k] = q16(L[i]); out[k + 1] = q16(R[i]); const a = Math.max(Math.abs(L[i]), Math.abs(R[i])); if (a > peak) peak = a; }
       done += n; if (progress && done >= next) { progress((pass + done / N) / passes); next += N / 20; } if (((done >> 7) & 7) === 0) { const nz = NZ; await paced(); NZ = nz; } } // (the noise is the export's own across its pauses: a track analysed in this worker meanwhile drew from it, and the stems no longer added up to the mix)
     if (!pass) { res.peakDb = 20 * Math.log10(peak + 1e-12); res.lufs = M.meter.integrated ? M.meter.integrated() : null;
       if (wantStems) { const last = Math.max(0, (N - 1) >> 3); for (let k = last + 1; k < K; k++) { g1[k] = g1[last]; g2[k] = g2[last]; } } // the curve's last knots hold its end
-      if (emit) emit(await bouncePart('mix', out, sr, false)); else res.mix = out; }
-    else { const name = BOUNCE_STEMS[pass - 1][0]; if (emit) emit(await bouncePart(name, out, sr, true)); else res.stems.push({ name, data: out, peakDb: 20 * Math.log10(peak + 1e-12) }); } }
+      const mixData = enc ? enc.finish() : out, kind = enc ? 'mp3' : w24 ? 24 : false; if (emit) emit(await bouncePart('mix', mixData, sr, kind)); else { res.mix = mixData; res.mixKind = kind; } }
+    else { const name = BOUNCE_STEMS[pass - 1][0], data = enc ? enc.finish() : out, kind = enc ? 'mp3' : true; if (emit) emit(await bouncePart(name, data, sr, kind)); else res.stems.push({ name, data, kind, peakDb: 20 * Math.log10(peak + 1e-12) }); } }
   return res; }

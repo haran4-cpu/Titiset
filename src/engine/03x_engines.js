@@ -14,12 +14,12 @@
 Object.assign(MODEL, { fm4: 25, pd: 26, add: 27, modal: 28, grain: 29, hyper: 30, va: 31, pluck2: 32 });
 const X_FIRST = 25;
 // the new engines' parameters (merged into every kit: a 9.3 kit is unchanged by them)
-const DFLT_X = { algo: 0, r1: 1, r2: 1, r3: 2, r4: 3.5, i2: 1, i3: 0.5, i4: 0.3, fb: 0, md: 0.4, ms: 0.25, pdw: 0, dcw: 0.6, tilt: 1, odd: 0.5, fpk: 0, fwd: 1, stretch: 0, shimmer: 0.3,
-  mat: 0, hard: 0.5, density: 0.5, gsize: 0.08, scan: 0.25, gjit: 0.15, oct2: 0, osc1: 0, osc2: 0, det2: 0.08, sync: 0, ring: 0, xmod: 0, flt: -1, fmorph: 0, dtype: 0, drv: 0, body: 0.5, pick: 0.3, stereo: 0.5 };
+const DFLT_X = { algo: 0, r1: 1, r2: 1, r3: 2, r4: 4, i2: 1, i3: 0, i4: 0, fb: 0, md: 0.4, ms: 0.25, pdw: 0, dcw: 0.6, tilt: 1, odd: 0.5, fpk: 0, fwd: 1, stretch: 0, shimmer: 0.3,
+  mat: 0, hard: 0.5, density: 0.5, gsize: 0.08, scan: 0.25, gjit: 0.15, oct2: 0, osc1: 0, osc2: 0, det2: 0, sync: 0, ring: 0, xmod: 0, flt: -1, fmorph: 0, dtype: 0, drv: 0, body: 0.5, pick: 0.3, stereo: 0.5 };
 { const base = dflt; dflt = () => Object.assign(base(), DFLT_X); } // eslint-disable-line no-func-assign
 // modal materials: four mode ratios, relative amplitudes and decays (× the voice's decay)
-const MODAL_R = [[1, 3.99, 10.65, 2.0], [1, 4.0, 10.0, 2.9], [1, 2.32, 4.25, 6.63], [1, 2.76, 5.40, 8.93], [1, 5.8, 15.0, 3.2], [1, 2.57, 4.2, 6.8], [1, 2.0, 3.0, 4.01], [1, 2.76, 5.4, 8.93]];
-const MODAL_A = [[1, 0.35, 0.12, 0.1], [1, 0.5, 0.25, 0.1], [1, 0.6, 0.45, 0.3], [1, 0.8, 0.6, 0.45], [1, 0.3, 0.1, 0.15], [1, 0.5, 0.3, 0.2], [1, 0.6, 0.4, 0.3], [1, 0.7, 0.5, 0.4]];
+const MODAL_R = [[1, 3.99, 10.65, 2.0], [1, 4.0, 10.0, 2.9], [1, 2.0, 4.0, 6.5], [1, 2.0, 3.0, 4.2], [1, 6.0, 15.0, 3.0], [1, 2.57, 4.2, 6.8], [1, 2.0, 3.0, 4.01], [1, 2.0, 4.0, 5.04]]; // (glass, bell and tube tuned so their pitch is the note: modes on or near the harmonics, the inharmonic ones quiet)
+const MODAL_A = [[1, 0.35, 0.12, 0.1], [1, 0.5, 0.25, 0.1], [1, 0.3, 0.2, 0.12], [1, 0.35, 0.25, 0.06], [1, 0.3, 0.1, 0.15], [1, 0.25, 0.12, 0.08], [1, 0.6, 0.4, 0.3], [1, 0.35, 0.25, 0.15]]; // (the struck modes are quieter than the fundamental on the inharmonic materials: they colour the note, the note keeps its pitch)
 const MODAL_D = [[1, 0.35, 0.12, 0.5], [1.6, 0.6, 0.3, 0.7], [1.2, 0.8, 0.5, 0.4], [2, 1.4, 1, 0.7], [1, 0.25, 0.1, 0.3], [0.25, 0.15, 0.1, 0.08], [1, 0.6, 0.4, 0.3], [3, 2, 1.4, 1]];
 const XS = new Float64Array(16), XR = new Float64Array(8); // per-block scratch (additive amplitudes): filled and used inside one voice's block
 const HYPER_D = [-0.12, -0.085, -0.052, -0.022, 0, 0.021, 0.05, 0.083, 0.118];
@@ -37,7 +37,7 @@ function initX(S, v, P, f, opt) { const sr = S.sr, m = S.m;
     v.e1 = 1; v.d1 = Math.exp(-1 / ((0.0006 + 0.004 * (1 - P.hard)) * sr)); v.e2 = 0.25 + 0.75 * P.hard; }
   else if (m === MODEL.grain) { // the texture the grains read: exactly periodic over the buffer, so a grain can cross its end without a click
     const Lb = 2400, k = Math.max(1, Math.round(Lb * f / sr)), fb = k * sr / Lb; v.kl = Lb; v.d2 = fb; /* read at f / fb: the exact pitch, glide included */ let a = 0, b = 0, c = 0, lp = 0, mx = 1e-9;
-    for (let i = 0; i < Lb; i++) { a += k / Lb; if (a >= 1) a -= 1; b += k * 1.0057 / Lb; if (b >= 1) b -= 1; c += 2 * k / Lb; if (c >= 1) c -= 1; const s = (2 * a - 1) * 0.5 + (2 * b - 1) * 0.35 + Math.sin(TAU * c) * 0.3 + noise() * P.noiseAmt; lp += (s - lp) * (0.15 + 0.8 * P.bright); v.ks[i] = lp; mx = Math.max(mx, Math.abs(lp)); }
+    for (let i = 0; i < Lb; i++) { a += k / Lb; if (a >= 1) a -= 1; b += k / Lb; if (b >= 1) b -= 1; c += 2 * k / Lb; if (c >= 1) c -= 1; const bb = b + 0.37 >= 1 ? b - 0.63 : b + 0.37, s = (2 * a - 1) * 0.5 + (2 * bb - 1) * 0.35 + /* (every layer a whole number of cycles over the buffer: the texture is exactly periodic, in tune) */ Math.sin(TAU * c) * 0.3 + noise() * P.noiseAmt; lp += (s - lp) * (0.15 + 0.8 * P.bright); v.ks[i] = lp; mx = Math.max(mx, Math.abs(lp)); }
     for (let i = 0; i < Lb; i++) v.ks[i] /= mx; for (let g = 0; g < 4; g++) { v.ph[g] = (g * 613) % Lb; v.ph[4 + g] = g / 4; } }
   else if (m === MODEL.pluck2) { const per = clamp(sr / f, 9, 2390), Li = Math.floor(per - 0.6), dl = per - Li - 0.5; v.kl = Li; v.kz = (1 - dl) / (1 + dl); v.apx = 0; v.apy = 0; let z = 0; const pk = Math.max(1, Math.round(Li * clamp(P.pick, 0.05, 0.5)));
     for (let i = 0; i <= Li + 1; i++) { z += (noise() - z) * (0.2 + 0.75 * P.bright); v.ks[i] = z; } for (let i = Li + 1; i >= pk; i--) v.ks[i] -= v.ks[i - pk] * 0.9; v.kw = Li + 2; // the pick position: a comb on the excitation
@@ -56,7 +56,7 @@ Synth.prototype.voiceX = function (v, L, R, n) {
   const vel = v.vel, idxS = (0.45 + 0.55 * vel) * (0.5 + P.bright), eco = ECO.level >= 2;
   const p_body = P.body, p_bright = P.bright, p_density = P.density, p_det2 = P.det2, p_detune = P.detune, p_fmorph = P.fmorph, p_gjit = P.gjit, p_gsize = P.gsize, p_hard = P.hard, p_i2 = P.i2, p_i3 = P.i3, p_i4 = P.i4, p_lfoShape = P.lfoShape, p_lfoSync = P.lfoSync, p_oct2 = P.oct2, p_osc1 = P.osc1, p_osc2 = P.osc2, p_pdw = P.pdw, p_pw = P.pw, p_ring = P.ring, p_scan = P.scan, p_stretch = P.stretch, p_sync = P.sync, p_xmod = P.xmod; // (the kit's values used per sample, in locals: a property load in the sample loop cost twice the FM voice)
   const fmS = P.ms, fmD = v.d1, fmI2 = P.i2 * idxS, fmI3 = P.i3 * idxS, fmI4 = P.i4 * idxS, fmAl = P.algo | 0, fmR1 = P.r1, fmR2 = P.r2, fmR3 = P.r3, fmR4 = P.r4, fmFb = P.fb * 0.5; // (fm4: the block's constants in locals)
-  let e1 = v.e1, e2 = v.e2, e3 = v.e3 >>> 0, crushH = 0, crushC = 0, sideLp = v.d3, dcz = v.mph; const r2 = Math.pow(2, P.oct2 + P.det2 / 12), dcA = TAU * 8 * inv; // dcz: the DC blocker (8 Hz) every engine ends with
+  let e1 = v.e1, e2 = v.e2, e3 = v.e3 >>> 0, crushH = 0, crushC = 0, sideLp = v.d3, dcz = v.mph; const smallDt = Math.abs(P.det2) < 1, r1x = smallDt && !(P.sync > 0) ? Math.pow(2, -P.det2 / 24) : 1, r2 = Math.pow(2, P.oct2 + (smallDt ? P.det2 / 24 : P.det2 / 12)), dcA = TAU * 8 * inv; // dcz: the DC blocker (8 Hz) every engine ends with
   while (i < n) {
     if (v.wait > 0) { const w = Math.min(v.wait, n - i); v.wait -= w; len -= w; i += w; if (i >= n) break; }
     const end = Math.min(n, i + (fstage === 0 || tt < 256 ? 4 : 16));
@@ -100,10 +100,10 @@ Synth.prototype.voiceX = function (v, L, R, n) {
         else if (al === 6) { const o2 = sin1(p[1]); y = (sin1(p[0] + I2 * o2) + sin1(p[2]) * p_i3 * 0.5 + o4 * p_i4 * 0.5) * 0.6; }
         else { y = (sin1(p[0]) + sin1(p[1]) * p_i2 * 0.6 + sin1(p[2]) * p_i3 * 0.5 + o4 * p_i4 * 0.4) * 0.5; } }
       else if (m === 26) { // pd: two lines, the second detuned, each a cosine bent by the DCW (0 = a sine)
-        const p = v.ph, d2 = dt * (1 + p_det2 * 0.01); p[0] += dt; p[0] -= Math.floor(p[0]); p[1] += d2; p[1] -= Math.floor(p[1]); const w = p_pdw | 0; let s0 = 0, s1 = 0;
+        const p = v.ph, d2 = dt * (1 + p_det2 * 0.005); p[0] += dt * (1 - p_det2 * 0.005); p[0] -= Math.floor(p[0]); /* (the two lines either side of the note) */ p[1] += d2; p[1] -= Math.floor(p[1]); const w = p_pdw | 0; let s0 = 0, s1 = 0;
         for (let k = 0; k < 2; k++) { const x = p[k]; let o;
           if (w === 1) { const xh = x < 0.5 ? x * 2 : x * 2 - 1, d = 1 - 0.95 * dcw, b = xh < d ? xh / d : 1; o = sin1((x < 0.5 ? 0 : 0.5) + 0.5 * b + 0.25); } // square: each half bends to its end early and holds
-          else if (w === 2) { o = (x < 0.5 ? 2 * x : 2 - 2 * x) * sin1(x * (1 + 14 * dcw) + 0.25); } // resonant: a sine sweeping inside a triangle window (no jump at the wrap)
+          else if (w === 2) { o = (x < 0.5 ? 2 * x : 2 - 2 * x) * sin1((x - 0.5) * (1 + 14 * dcw) + 0.25); } // resonant: a sine sweeping inside a triangle window (no jump at the wrap), centred on the window — its sweep stays in place, so does the pitch
           else { const d = 0.5 - 0.49 * dcw, ph2 = x < d ? x * 0.5 / d : 0.5 + (x - d) * 0.5 / (1 - d); o = sin1(ph2 + 0.25); } // saw
           if (k) s1 = o; else s0 = o; }
         y = (s0 + s1) * 0.45; side = (s0 - s1) * 0.3 * wide; }
@@ -121,7 +121,7 @@ Synth.prototype.voiceX = function (v, L, R, n) {
       else if (m === 29) { // grain: four grains reading the texture, Hann windows, scanning
         const B = v.ks, Lb = v.kl, rate = f * pe / v.d2, gsz = Math.max(0.01, p_gsize), dAge = inv / gsz * (0.6 + 0.8 * p_density); let l = 0, r = 0;
         for (let g = 0; g < 4; g++) { let age = v.ph[4 + g] + dAge; if (age >= 1) { age -= 1; e3 = (Math.imul(e3, 1664525) + 1013904223) >>> 0; const j = e3 / 4294967296; v.ph[g] = (((tt * inv * p_scan * 400) + j * p_gjit * Lb) % Lb + Lb) % Lb; }
-          v.ph[4 + g] = age; let pos = v.ph[g] + rate * (1 + (g - 1.5) * p_gjit * 0.004); if (pos >= Lb) pos -= Lb; v.ph[g] = pos;
+          v.ph[4 + g] = age; let pos = v.ph[g] + rate * (1 + (g - 1.5) * p_gjit * 0.0012); if (pos >= Lb) pos -= Lb; v.ph[g] = pos;
           const ip = pos | 0, fr = pos - ip, s = B[ip] + (B[ip + 1 < Lb ? ip + 1 : 0] - B[ip]) * fr, wv = 0.5 - 0.5 * sin1(age + 0.25), o = s * wv; if (g & 1) { l += o * (1 - wide * 0.6); r += o; } else { l += o; r += o * (1 - wide * 0.6); } }
         y = (l + r) * 0.4; side = (l - r) * 0.4; }
       else if (m === 30) { // hyper: nine drifting saws, the odd ones left, the even ones right; an octave layer
@@ -130,7 +130,7 @@ Synth.prototype.voiceX = function (v, L, R, n) {
         if (p_oct2) { const d2 = dt * 2.003; v.pa[0] += d2; if (v.pa[0] >= 1) v.pa[0] -= 1; s += (2 * v.pa[0] - 1 - blep(v.pa[0], d2)) * 1.5 * p_oct2; }
         y = s * (eco ? 0.3 : 0.16); side = sd * 0.16 * wide; }
       else if (m === 31) { // va: osc 1 + osc 2 (detune / octave), hard sync, ring, cross-mod
-        const p = v.ph, syncR = 1 + p_sync * (3 + 4 * fenv); let d1 = dt * (1 + p_xmod * 0.5 * (p[2] < 0.5 ? 1 : -1)), d2 = dt * r2 * syncR;
+        const p = v.ph, syncR = 1 + p_sync * (3 + 4 * fenv); let d1 = dt * r1x * (1 + p_xmod * 0.5 * (p[2] < 0.5 ? 1 : -1)), d2 = dt * r2 * syncR;
         if (d1 < 0) d1 = 0; p[0] += d1; let wrapped = false; if (p[0] >= 1) { p[0] -= 1; wrapped = true; } p[1] += d2; if (p[1] >= 1) p[1] -= 1; if (p_sync > 0 && wrapped) p[1] = p[0] * r2 * syncR; p[2] = p[1];
         const a = vaOsc(p_osc1 | 0, p[0], d1, p_pw), b = vaOsc(p_osc2 | 0, p[1], d2, p_pw); y = (a * (1 - p_ring * 0.5) + b * 0.8 + a * b * p_ring) * 0.5; side = (a - b) * 0.15 * wide; }
       else { // pluck2: the string, then the body
@@ -142,10 +142,10 @@ Synth.prototype.voiceX = function (v, L, R, n) {
       else if (flt === 3) { v.s1.run(tanh(y * 1.4)); y = tanh(v.s1.lp * 1.2); } // MS-20-style: a hot input and a saturated resonance
       else if (flt === 4) { v.s1.run(y); const mo = p_fmorph; y = mo < 0.5 ? v.s1.lp * (1 - 2 * mo) + (v.s1.lp + v.s1.hp) * 2 * mo : (v.s1.lp + v.s1.hp) * (2 - 2 * mo) + v.s1.hp * (2 * mo - 1); } // SEM-style: low-pass → notch → high-pass
       else if (flt === 6) { v.s1.run(y); y = v.s1.bp * 1.6; }
-      else if (flt === 7) { v.s1.run(y); v.s2.run(y); v.s3.run(y); y = (v.s1.bp + v.s2.bp * 0.6 + v.s3.bp * 0.35) * 1.4; }
+      else if (flt === 7) { v.s1.run(y); v.s2.run(y); v.s3.run(y); y = (v.s1.bp + v.s2.bp * 0.6 + v.s3.bp * 0.35) * 1.4 + y * 0.3; } // (a little of the dry signal under the vowel: the fundamental stays, so does the pitch)
       if (flt) { sideLp += (side - sideLp) * sideA; if (sideLp < 1e-20 && sideLp > -1e-20) sideLp = 0; side = sideLp; }
       // the drive
-      if (dty === 4) { if (crushC-- <= 0) { crushC = (drv * 10) | 0; crushH = xDrive(4, y, drv, 0); } y = crushH; } else if (dty) y = xDrive(dty, y, drv, 0);
+      if (dty === 4) { if (crushC-- <= 0) { crushC = (drv * 5) | 0; crushH = xDrive(4, y, drv, 0); } y = crushH; } else if (dty) y = xDrive(dty, y, drv, 0);
       dcz += (y - dcz) * dcA; y -= dcz; const g = env * outG * am, o = y * g, sg = side * g; L[i] += (o - sg) * gL; R[i] += (o + sg) * gR;
     }
     if (!alive) break;

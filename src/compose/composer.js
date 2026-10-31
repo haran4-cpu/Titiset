@@ -84,10 +84,10 @@ function makeForm(G, r, len) { const st = G.form, F = [], ch = (a) => a[Math.flo
     add('outro', ch([8, 16]), 'outro'); return F; }
   // the opening
   const dj = st === 'club' || st === 'deep' || st === 'techno' || st === 'garage' || st === 'trance' || st === 'hard';
-  const intro = st === 'bass' ? ch(['atmos', 'short']) : st === 'psy' ? ch(['dj1', 'dj1', 'atmos']) : st === 'dnb' ? ch(['dj1', 'dj2', 'atmos']) : ch(['dj2', 'dj2', 'dj1', 'atmos', 'groovy']);
+  const intro = st === 'bass' ? ch(['atmos', 'short']) : st === 'psy' ? 'dj1' : st === 'dnb' ? ch(['dj1', 'dj2']) : ch(['dj2', 'dj2', 'dj1', 'groovy']); // (a mixable track opens on its drums, and its first section after the intro is a groove: an Auto-DJ handover that landed on an intro without drums, or on a breakdown, sagged — measured)
   if (intro === 'dj2') { add('intro', ch([16, 16, 32]), 'drums0'); add('intro', ch([16, 16, 32]), 'drums1'); } else if (intro === 'dj1') add('intro', ch([16, 32, 32]), 'drums1');
   else if (intro === 'atmos') { add('intro', ch([8, 16]), 'intro'); if (st !== 'bass') add('intro', 16, 'drums1'); } else if (intro === 'short') add('intro', 8, 'intro'); else { add('intro', 16, 'drums1'); add('groove', ch([16, 32]), 'groove'); }
-  if (intro !== 'groovy' && st !== 'bass' && (st === 'psy' || st === 'dnb' || r() < 0.75)) add(st === 'dnb' ? 'intro' : 'groove', st === 'psy' ? ch([32, 48, 64]) : st === 'dnb' ? 16 : ch([16, 32, 32]), 'groove');
+  if (intro !== 'groovy' && st !== 'bass' && (st === 'psy' || st === 'dnb' || dj || r() < 0.75)) add(st === 'dnb' ? 'intro' : 'groove', st === 'psy' ? ch([32, 48, 64]) : st === 'dnb' ? 16 : ch([16, 32, 32]), 'groove');
   // the drops, each reached its own way
   const ACTS = st === 'trance' || st === 'hard' ? [['classic', 5], ['long', 3], ['false', 2], ['direct', 1]] : st === 'psy' ? [['classic', 5], ['direct', 2], ['lift', 2], ['false', 1]] : st === 'dnb' ? [['classic', 4], ['direct', 3], ['false', 1]]
     : st === 'bass' ? [['classic', 5], ['direct', 2], ['false', 2]] : st === 'techno' ? [['classic', 3], ['direct', 3], ['peak', 3], ['lift', 2], ['false', 1]] : [['classic', 5], ['direct', 2], ['lift', 2], ['false', 2], ['peak', 1]];
@@ -103,7 +103,7 @@ function makeForm(G, r, len) { const st = G.form, F = [], ch = (a) => a[Math.flo
     else { add('break', ch([8, 16]), 'break'); add('build', 8, 'build'); add('groove', ch([4, 8]), 'tease', { fake: 1 }); add('build', ch([4, 8]), 'build'); add('drop', dropLen, 'drop'); } // the false drop
     if (k < nDrops - 1 && st !== 'bass' && r() < (st === 'psy' || st === 'techno' ? 0.6 : 0.4)) add('groove', ch([16, 32]), 'groove2'); }
   // the ending
-  if (st !== 'bass' && r() < 0.3) add(dj ? 'groove' : 'break', dj ? ch([16, 32]) : 8, dj ? 'groove2' : 'break2');
+  const down = r(); if (dj || (st === 'psy' && down < 0.7) || (st === 'dnb' && down < 0.5)) add('groove', ch([16, 16, 32]), 'groove2'); else if (st !== 'bass' && down < 0.85) add('break', 8, 'break2'); // (after the last drop the track comes down before its outro: the DJ mixes the next one in over a groove, not over the peak — measured on the Auto-DJ handovers)
   add('outro', st === 'bass' ? ch([8, 16]) : ch([16, 16, 24, 32]), 'outro'); return F; }
 // (v9.4) more of the same track, live: one more act (how the track reaches a new drop) in the track's own style, or the playing
 // section carried on. Returns [[type, bars, layer], …] — the caller splices it into the written form (src/ui/extend.js).
@@ -215,7 +215,7 @@ function harmArt(P, bar, cseed) { const si = P.sections.findIndex((x) => bar >= 
   const afterGap = start && si > 0 && P.sections[si - 1].type === 'build'; let on = W[0] * (start && !ART_KICKLOCK.has(P.gid) ? 0.7 : 1), push = afterGap ? 0 : W[1], late = W[2]; const sum = on + push + late;
   const x = u * sum; if (x < on) return 0; if (x < on + push) return v < 0.6 ? -2 : -1;
   const calm = sec.type === 'intro' || sec.type === 'break' || sec.type === 'outro'; return start && calm && v < 0.3 && chordRunBars(P, sec, 0) >= 2 ? 8 : v < 0.65 ? 2 : 3; }
-function chordHoldSteps(P, sec, b) { const run = chordRunBars(P, sec, b); return Math.max(1, run * 16 - (sec.type === 'build' && b + run >= sec.bars ? (sec.bx ? sec.bx.gap : DROP_GAP) : 0)) - 0.25; }
+function chordHoldSteps(P, sec, b) { const run = chordRunBars(P, sec, b); return Math.max(1, run * 16 - (sec.type === 'build' && b + run >= sec.bars ? (sec.bx ? sec.bx.gap : DROP_GAP) : sec.dx === 'gap' && b + run >= sec.bars ? DROP_GAP : 0)) - 0.25; }
 // multi-bar lane strings: a lane of 32/48/64 steps plays its bars in turn (variation inside a pattern, Elektron-style)
 function laneBar(str, b) { if (!str || str.length <= 16) return str; const n = Math.floor(str.length / 16); const k = ((b % n) + n) % n; return str.slice(k * 16, k * 16 + 16); }
 function chordPc(P, c) { return (P.key + c.root) % 12; }
@@ -359,7 +359,7 @@ function varyDrums(v, r, amt, four) { if (!(amt > 0)) return v; const o = Object
 // grid (the off-beat open hat and the genre's accents stay; a closed hat never lands where the open hat rings), one or two ghost
 // snares, the open hat thinned or moved to the bar end, a syncopated kick in the broken genres (never on the backbeat), the
 // percussion rotated or swapped for its neighbour. The written pattern stays the identity; this is the drummer's version of it.
-const HAT_GRIDS = ['g...g...g...g...', 'g.g.g.g.g.g.g.g.', 'g..gg..gg..gg..g', 'gg.ggg.ggg.ggg.g', '.g.g.g.g.g.g.g.g', 'g.ggg.ggg.ggg.gg', 'x..g..x.g..g..x.', 'g.xgg.xgg.xgg.xg', 'ggxgggxgggxgggxg', '..x...x...x...x.', 'g.x..gx.g.x..gx.', '.g...g...g...g..', '...g...g...g...g', 'g..g..g.g..g..g.', 'gg...g..gg...g..'];
+const HAT_GRIDS = ['g...g...g...g...', 'g.g.g.g.g.g.g.g.', 'g..gg..gg..gg..g', 'gg.ggg.ggg.ggg.g', '.g.g.g.g.g.g.g.g', 'g.ggg.ggg.ggg.gg', 'x..g..x.g..g..x.', 'g.xgg.xgg.xgg.xg', 'ggxgggxgggxgggxg', '..x...x...x...x.', 'g.x..gx.g.x..gx.', '.g...g...g...g..', '...g...g...g...g', 'g..g..g.g..g..g.', 'gg...g..gg...g..', /* v9.4: more of a drummer's hands */ 'g.gxg.gxg.gxg.gx', 'x.g.x.g.x.g.x.gg', 'g..xg..xg..xg.xx', '.gxg.gxg.gxg.gxg', 'gxg.gxg.gxg.gxg.', 'g.g.gxg.g.g.gxgg'];
 const PERC_NEIGHBOUR = { conga: 'bongo', bongo: 'conga', clave: 'rim', rim: 'clave', cowbell: 'agogo', agogo: 'cowbell', tamb: 'shaker', shaker: 'tamb', tom: 'conga' };
 // (v9.4) the wider choice per genre family: a track may swap a percussion voice for one of these (its own instrument, same pattern)
 const PERC_ALT = { organic: { conga: ['bongo', 'djembe', 'tabla', 'udu', 'frame'], bongo: ['conga', 'tabla', 'udu'], tom: ['conga', 'surdo', 'frame', 'logdrum'], clave: ['rim', 'temple', 'snap', 'wood'], wood: ['temple', 'clave'], cowbell: ['agogo', 'bell', 'cuica'], agogo: ['cowbell', 'bell'], tamb: ['shaker', 'cabasa', 'maraca'], timbale: ['cajon', 'frame'], triangle: ['bell'], djembe: ['conga', 'frame', 'udu'] },
@@ -608,7 +608,7 @@ function composeTrack(gid, seed, o) {
       const chordChanged = chordVoicedAt(P, sec, b); // (also on every chord slot: a one-chord progression re-voices its pad instead of going silent after the first slot)
       const buildPos = sec.type === 'build' ? b / sec.bars : -1; // 0..1 through the build
       const gapSteps = sec.type === 'build' && b === sec.bars - 1 ? (bx ? bx.gap : DROP_GAP) : sec.dx === 'gap' && b === sec.bars - 1 ? DROP_GAP : 0; // the half-beat of silence before the drop (v9.4: a beat, half a beat or none — the build's ending)
-      const silentFrom = 16 - gapSteps, cap = (st, len) => (gapSteps ? Math.max(0.25, Math.min(len, silentFrom - st)) : len); // (a note started before the gap is cut at it: the half-beat is silence, not a rest the sustained parts ring through)
+      const secEnd = b === sec.bars - 1 && si < P.sections.length - 1 && sec.bars <= 8, silentFrom = 16 - gapSteps, cap = (st, len) => (gapSteps ? Math.max(0.25, Math.min(len, silentFrom - st)) : secEnd ? Math.max(0.25, Math.min(len, 16.5 - st)) : len); // (a note started before the gap is cut at it: the half-beat is silence, not a rest the sustained parts ring through. v9.4: in a short section — a false drop, a short build — nothing rings past its end either)
       const dvI = drumVariant(sec, b, nVar), half = b >= 16 ? 1 : 0, vari = (sec.type === 'build' || sec.dv) ? dMut[half][dvI] : b % 4 === 3 ? dTail[half][dvI] : b % 4 === 1 ? dTwo[half][dvI] : dMut[half][dvI]; patD[bar] = dvI;
       // the texture bed follows the harmony (pitch-class mask + root on every chord change; d = -1 marks a chord event)
       if (chordChanged) { let mk = 0; for (const pc of pcs) mk |= 1 << pc; S.push(t0, CH.tex, TEX_KIND[P.texture] || 0, 0, -1, mk, chordPc(P, c), 0); }
@@ -618,7 +618,7 @@ function composeTrack(gid, seed, o) {
       // like a chopped Amen, a different cut each time (deterministic per bar, outside the random streams)
       const edit = EDIT_FAM.has(G.family) && (sec.type === 'drop' || sec.type === 'groove') && (phraseBar === 3 || (phraseBar === 5 && sec.type === 'drop')) && silentFrom === 16 ? BREAK_EDITS[hashStr(P.seed + ':' + bar) % BREAK_EDITS.length] : null;
       const lateN = sec.bars >= 8 ? 2 : 1, kickOn = L.kick && !(sec.type === 'build' && (shape === 'lateroll' ? b >= sec.bars - lateN : shape === 'kickroll' ? false : shape === 'half' ? b >= sec.bars - 1 : (!four ? b > 0 : buildPos >= (L.kick || 0))));
-      if (shape === 'kickroll' && b === sec.bars - 1) for (let st = 2; st < silentFrom; st += st < 8 ? 2 : 1) if (st % 4) S.push(t0 + st, CH.kick, 0, 0.55 + 0.4 * st / 16, 1, 0, 0); // (v9.4) the kick roll: eighths, then sixteenths into the drop
+      if (shape === 'kickroll' && b === sec.bars - 1) for (let st = 2; st < silentFrom; st += st < 8 ? 2 : 1) if (st % 4) S.push(t0 + st + sw(st), CH.kick, 0, 0.55 + 0.4 * st / 16, 1, 0, 0); // (v9.4) the kick roll: eighths, then sixteenths into the drop
       if (kickOn && edit) for (const e of parsePat(edit[0])) S.push(t0 + 12 + e.step + sw(12 + e.step), CH.kick, 0, e.vel, 1, 0, 0);
       const PL = PROD[G.family] || {}, groovy = sec.type === 'drop' || sec.type === 'groove';
       const kickMute = PL.kickMute && groovy && four && b % 16 === 15 && b !== sec.bars - 1 && hashStr(P.seed + '/km' + bar) % 2 === 0;
@@ -643,7 +643,7 @@ function composeTrack(gid, seed, o) {
       const rollBar = shape === 'lateroll' ? b >= sec.bars - lateN : shape === 'half' || shape === 'tom' ? b === sec.bars - 1 : shape === 'kickroll' ? false : true;
       if (sec.type === 'build' && L.snare && rollBar) { const rp = shape === 'lateroll' ? (b - (sec.bars - lateN) + 0.5) / lateN : shape === 'half' || shape === 'tom' ? 0.8 : buildPos;
         const div = rp < 0.25 ? 4 : rp < 0.5 ? 2 : rp < 0.75 ? 1 : 0.5, kind = shape === 'clap' ? 1 : 3;
-        if (shape === 'tom') { const tn = [45, 47, 50, 52, 55, 57, 59, 62]; for (let s = 0; s < silentFrom; s += 1) S.push(t0 + s, CH.perc, tn[Math.min(tn.length - 1, s >> 1)], 0.5 + 0.03 * s, 1, PERC_KINDS.tom << 2, 0, s % 2 ? 0.35 : -0.35); } // a tom run up into the drop
+        if (shape === 'tom') { const tn = [45, 47, 50, 52, 55, 57, 59, 62]; for (let s = 0; s < silentFrom; s += 1) S.push(t0 + s + sw(s), CH.perc, tn[Math.min(tn.length - 1, s >> 1)], 0.5 + 0.03 * s, 1, PERC_KINDS.tom << 2, 0, s % 2 ? 0.35 : -0.35); } // a tom run up into the drop
         else for (let s = 0; s < silentFrom; s += div) { const pr = shape === 'lateroll' ? rp : (b + s / 16) / sec.bars; S.push(t0 + s + (div >= 1 ? sw(s | 0) : 0), CH.snare, kind, 0.35 + 0.6 * pr * pr + 0.05, 1, 0, 0); }
       } else if (sec.type === 'build' && L.snare && (shape === 'half' || shape === 'tom')) { for (const st of shape === 'half' ? [8] : [4, 12]) if (st < silentFrom) S.push(t0 + st, CH.snare, 3, 0.8, 1, 0, 0); } // half time: the snare on three
       else if (sec.type === 'build' && shape === 'kickroll') { /* the kick carries this build: hats and percussion only */ }
@@ -651,11 +651,11 @@ function composeTrack(gid, seed, o) {
         const fillPat = lastOfPhrase && G.drums.fill && (b === sec.bars - 1 || phraseBar === 7) && sec.type !== 'intro' ? pick(rd, G.drums.fill) : null;
         const fillStart = fillPat ? fillPat.search(/[^.]/) : 99;
         if (edit && !fillPat) for (const e of parsePat(edit[1])) S.push(t0 + 12 + e.step + sw(12 + e.step), CH.snare, 3, e.vel * (0.95 + rh() * 0.1), 1, 0, 0);
-        for (const e of parsePat(laneBar(vari.s, b))) if (e.step < fillStart && !(edit && !fillPat && e.step >= 12)) S.push(t0 + e.step + sw(e.step) + fS + (rh() - 0.5) * 0.02, CH.snare, 3, e.vel * (0.97 + rh() * 0.06), 1, 0, 0);
-        if (fillPat) for (const e of parsePat(fillPat)) S.push(t0 + e.step + sw(e.step), CH.snare, 3, e.vel * (0.95 + rh() * 0.1), 1, 0, 0);
+        for (const e of parsePat(laneBar(vari.s, b))) if (e.step < fillStart && e.step < silentFrom && !(edit && !fillPat && e.step >= 12)) S.push(t0 + e.step + sw(e.step) + fS + (rh() - 0.5) * 0.02, CH.snare, 3, e.vel * (0.97 + rh() * 0.06), 1, 0, 0);
+        if (fillPat) for (const e of parsePat(fillPat)) if (e.step < silentFrom) S.push(t0 + e.step + sw(e.step), CH.snare, 3, e.vel * (0.95 + rh() * 0.1), 1, 0, 0);
       }
       if (sec.dx === 'fill' && b === sec.bars - 1 && !(L.snare && vari.s)) for (const e of parsePat((G.drums.fill || ['............x.xX'])[hashStr(P.seed + '/dxf/' + bar) % (G.drums.fill || [0]).length])) if (e.step < silentFrom) S.push(t0 + e.step + sw(e.step), CH.snare, 3, e.vel * 0.9, 1, 0, 0); // a breakdown straight into its drop: the fill
-      if (L.snare && vari.rim && sec.type !== 'build') for (const e of parsePat(laneBar(vari.rim, b))) S.push(t0 + e.step + sw(e.step) + (rh() - 0.5) * 0.03, CH.snare, 2, e.vel * (0.9 + rh() * 0.2), 1, 0, 0);
+      if (L.snare && vari.rim && sec.type !== 'build') for (const e of parsePat(laneBar(vari.rim, b))) if (e.step < silentFrom) S.push(t0 + e.step + sw(e.step) + (rh() - 0.5) * 0.03, CH.snare, 2, e.vel * (0.9 + rh() * 0.2), 1, 0, 0);
       // hats: fraction < 1 thins to open hats only (and half the bars at ≤ .3)
       if (L.hats) { const lanes = L.hats >= 1 ? ['hc', 'ho', 'ride', 'sh'] : ['ho'];
         if (!(L.hats <= 0.3 && b % 2)) for (const ln of lanes) { const pat = laneBar(vari[ln], b); if (!pat) continue; const kind = HAT_KIND[ln];
@@ -782,7 +782,7 @@ function composeTrack(gid, seed, o) {
       }
       if (G.hook && hook2Idea && (lf >= 1 || (sec.type === 'break' && lf > 0.6 && b >= sec.bars / 2))) {
         const p8 = b % 8, base = bar - p8; renderHook(P, hook2Idea, p8, (k) => chordTonesPc(P, chordAt(P, Math.min(P.bars - 1, base + k))), tmp, 0);
-        for (const n of tmp) { if (n.s >= silentFrom) continue; const lm = leadMask[Math.min(15, Math.round(n.s))]; if (G.hook.lead2 && G.hook.mode === 'answer' && lm) continue; S.push(t0 + n.s + sw(n.s), CH.arp, n.m, (n.s % 4 === 0 ? 0.9 : 0.75) * (lm === 2 ? 0.7 : lm === 1 ? 0.88 : 1.08), cap(n.s, n.len * 0.92), 0, sec.type === 'break' ? 0.6 : 1); }
+        for (const n of tmp) { if (n.s >= silentFrom) continue; const lm = leadMask[Math.min(15, Math.round(n.s))]; if (G.hook.lead2 && G.hook.mode === 'answer' && lm) continue; if (b === sec.bars - 1 || (G.hook.lead2 && cNext !== c)) n.len = Math.max(0.5, Math.min(n.len, (16 - n.s - (G.hook.lead2 && cNext !== c ? 2.5 : 0.5)) / 0.92)); /* (not past the section's end — v9.4's short sections — nor, for LEAD 2, into the next chord) */ S.push(t0 + n.s + sw(n.s), CH.arp, n.m, (n.s % 4 === 0 ? 0.9 : 0.75) * (lm === 2 ? 0.7 : lm === 1 ? 0.88 : 1.08), cap(n.s, n.len * 0.92), 0, sec.type === 'break' ? 0.6 : 1); }
       }
       // the acid second voice (psytrance, v9.1): two bars, following the chord roots, answering in the riff's gaps — enters halfway
       // through the groove with its filter opening, carries on through the drops (hook.in: its level per section type)

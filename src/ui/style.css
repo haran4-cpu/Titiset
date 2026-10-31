@@ -553,3 +553,8 @@ body.shell { height: 100vh; height: 100dvh; overflow: hidden; padding-bottom: 0 
 .shell .chan .kn { min-width: 0; } .shell .chan .kn .colorkind { font-size: 12px; padding: 0 4px; }
 .shell .chan .fader { grid-area: f; } .shell .chan .cuebtn { grid-area: c; }
 @media (min-width: 700px) { .shell .chans { grid-template-columns: 1fr 1fr; } }
+/* (v9.4) the length of new tracks (SET) */
+.lenpick { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 4px 0 8px; } .lenpick .seg button { min-height: var(--tap); padding: 0 16px; }
+/* (v9.4) the sound browser's character filter, and the engine / character on each card */
+.dk-tagf { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; } .dk-tagf button { min-height: 36px; padding: 0 10px; border-radius: 18px; border: 1px solid var(--line2); background: var(--panel2); font-size: 13px; } .dk-tagf button.on { border-color: var(--acc); color: var(--acc); }
+.dk-pcard i, .dk-pcard em { display: block; font-size: 11px; color: var(--dim); font-style: normal; } .dk-pcard em { opacity: .85; } .dk-pcard[hidden] { display: none; }

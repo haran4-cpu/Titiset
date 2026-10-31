@@ -62,7 +62,20 @@ function renderCuePanel() { const el = $('#cuePanel'); if (!el || el.hidden) ret
 
 // ---- recording: the master as heard (Opus in WebM / Ogg, 256 kb/s), downloaded when stopped
 function recMime() { for (const m of ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4']) if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m; return ''; }
+// (v9.4) MP3: the master as heard, taken sample by sample from the engine's output (a tap worklet) and encoded as the set plays by
+// FORGE's own MP3 encoder (320 kbit/s, joint stereo) on the composer thread — the file is ready the moment you stop, and a
+// one-hour set holds ~140 MB of MP3 in memory, never the raw audio. Falls back to the browser's Opus recorder.
+const TAP_SRC = "class T extends AudioWorkletProcessor{constructor(){super();this.n=0;this.L=new Float32Array(16384);this.R=new Float32Array(16384);this.port.onmessage=(e)=>{if(e.data==='flush'){this.f();this.port.postMessage('done');}}}f(){if(this.n){const L=this.L.slice(0,this.n),R=this.R.slice(0,this.n);this.port.postMessage({L,R},[L.buffer,R.buffer]);this.n=0;}}process(i){const a=i[0];if(a&&a.length){const l=a[0],r=a[1]||a[0];this.L.set(l,this.n);this.R.set(r,this.n);this.n+=l.length;if(this.n>16384-256)this.f();}return true}}registerProcessor('forge-tap',T);";
+async function startMp3Rec() { const ctx = A.ctx, W = composerWorker(); if (!ctx.audioWorklet || !A.node || !W) return false; if (!PERF.tapReady) { const u = URL.createObjectURL(new Blob([TAP_SRC], { type: 'text/javascript' })); try { await ctx.audioWorklet.addModule(u); PERF.tapReady = 1; } catch (e) { return false; } finally { URL.revokeObjectURL(u); } }
+  const tap = new AudioWorkletNode(ctx, 'forge-tap', { numberOfInputs: 1, numberOfOutputs: 0, channelCount: 2, channelCountMode: 'explicit' }); A.node.connect(tap, 0);
+  W.postMessage({ type: 'mp3rec', op: 'start', sr: ctx.sampleRate, kbps: 320 }); let frames = 0; tap.port.onmessage = (e) => { if (e.data && e.data.L) { frames += e.data.L.length; W.postMessage({ type: 'mp3rec', op: 'push', L: e.data.L, R: e.data.R }, [e.data.L.buffer, e.data.R.buffer]); } };
+  PERF.rec = { mp3: true, tap, stop: () => { tap.port.onmessage = (e) => { if (e.data && e.data.L) W.postMessage({ type: 'mp3rec', op: 'push', L: e.data.L, R: e.data.R }, [e.data.L.buffer, e.data.R.buffer]); else if (e.data === 'done') finish(); }; tap.port.postMessage('flush'); } };
+  const finish = () => { try { A.node.disconnect(tap); } catch (er) { /* ignore */ } const id = 'rec' + Date.now(); const h = (ev) => { const m = ev.data; if (m.type !== 'mp3rec' || m.id !== id) return; W.removeEventListener('message', h);
+      const blob = new Blob([m.data], { type: 'audio/mpeg' }), info = `${fmtTime(frames / ctx.sampleRate)}, ${(blob.size / 1e6).toFixed(1)} MB MP3 320`; saveFile(`FORGE-set-${stamp()}.mp3`, blob).then((saved) => { if (saved !== null) toast(`Recording ${saved === false ? 'not saved (declined)' : 'saved'} (${info})`); }); };
+    W.addEventListener('message', h); W.postMessage({ type: 'mp3rec', op: 'finish', id }); PERF.rec = null; renderRec(); };
+  PERF.recT0 = performance.now(); renderRec(); toast('Recording the master — MP3 320'); return true; }
 async function toggleRec() { await startAudio(); if (PERF.rec) { PERF.rec.stop(); return; }
+  if (PERF.cueMode !== 'split' && typeof mp3Encoder === 'function' && (await startMp3Rec())) return;
   if (!window.MediaRecorder) { toast('Recording is not supported in this browser'); return; }
   const ctx = A.ctx, md = ctx.createMediaStreamDestination(); if (A.node) A.node.connect(md, 0); else { toast('Recording needs the AudioWorklet engine'); return; }
   if (PERF.cueMode === 'split') toast('Note: split cue is on — the recording has the cue in the right channel');

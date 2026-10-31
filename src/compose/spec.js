@@ -50,7 +50,7 @@ function validateSpec(spec) {
   const E = [], W = []; const err = (path, msg, hint) => E.push({ path, msg, hint }), warn = (path, msg, hint) => W.push({ path, msg, hint });
   const isObj = (x) => x && typeof x === 'object' && !Array.isArray(x), isNum = (x) => typeof x === 'number' && isFinite(x);
   if (!isObj(spec)) { err('', 'the score must be a JSON object', '{"forge":1,"genre":"tech-house"}'); return { ok: false, errors: E, warnings: W }; }
-  const known = ['forge', 'title', 'genre', 'mood', 'seed', 'variation', 'melodySeed', 'seeds', 'complexity', 'bpm', 'key', 'mode', 'swing', 'harmony', 'form', 'drums', 'bass', 'chords', 'lead', 'sound', 'mix', 'notes'];
+  const known = ['forge', 'title', 'genre', 'mood', 'seed', 'variation', 'melodySeed', 'seeds', 'complexity', 'bpm', 'key', 'mode', 'swing', 'harmony', 'form', 'drums', 'bass', 'chords', 'lead', 'sound', 'mix', 'notes', 'length', 'ext'];
   for (const k of Object.keys(spec)) if (!known.includes(k)) warn(k, 'unknown field — ignored', 'fields: ' + known.join(', '));
   if (spec.forge !== SPEC_VERSION) err('forge', `must be ${SPEC_VERSION}`, '"forge": 1');
   const G = GENRE_BY_ID[spec.genre]; if (!G) err('genre', `unknown genre "${spec.genre}"`, 'one of: ' + GENRES.map((g) => g.id).join(', '));
@@ -126,6 +126,7 @@ function validateSpec(spec) {
       if (!SPEC_SOUND_SLOTS.includes(slot)) { err(`sound.${slot}`, `unknown slot "${slot}"`, 'slots: ' + SPEC_SOUND_SLOTS.join(', ')); continue; }
       if (!isObj(v)) { err(`sound.${slot}`, 'must be an object of parameters'); continue; } for (const [k, x] of Object.entries(v)) { if (k === 'preset') { if (typeof x !== 'string' || !presetKit(slot, x)) err(`sound.${slot}.preset`, `unknown ${slot} preset "${x}"`, 'one of: ' + Object.keys(SOUND_BANK[slot] || {}).join(', ')); } else if (k === 'model') { if (!MODEL.hasOwnProperty(x)) err(`sound.${slot}.model`, `unknown model "${x}"`, 'one of: ' + Object.keys(MODEL).join(', ')); }
         else if (k === 'kind' || k === 'vowel') { if (typeof x !== 'string') err(`sound.${slot}.${k}`, 'must be a string'); } else if (!isNum(x)) err(`sound.${slot}.${k}`, 'must be a number'); } } }
+  if (spec.length != null && !['radio', 'club', 'extended', 'classic'].includes(spec.length)) err('length', `unknown length "${spec.length}"`, 'radio, club or extended'); // (v9.4) the form's length when no form is written
   if (spec.mix != null) { if (!isObj(spec.mix)) err('mix', 'must be an object'); else { const R = { lufs: [-20, -5], verb: [0, 1], delay: [0, 1], sidechain: [0, 0.9], heat: [0, 2], punch: [0, 2], echo: [0, 2] };
     for (const [k, v] of Object.entries(spec.mix)) { if (!R[k]) err(`mix.${k}`, 'unknown mix field', 'lufs, verb, delay, echo, sidechain, heat, punch'); else if (!isNum(v) || v < R[k][0] || v > R[k][1]) err(`mix.${k}`, `must be ${R[k][0]}…${R[k][1]}`); } } }
   return { ok: E.length === 0, errors: E, warnings: W };
@@ -190,6 +191,7 @@ function compileSpec(spec, opts) {
   if (spec.bpm != null) o.bpm = spec.bpm; if (spec.key != null) o.key = KEY_PC[spec.key]; if (spec.mode != null) o.mode = spec.mode;
   if (spec.harmony && spec.harmony.progression) o.prog = spec.harmony.progression.slice();
   if (spec.mood) { o.mood = spec.mood; o.extFixed = !!(spec.harmony && spec.harmony.extension); o.hrFixed = !!(spec.harmony && spec.harmony.barsPerChord); } if (spec.variation != null) o.vseed = spec.variation; if (spec.seeds) o.seeds = Object.assign({}, spec.seeds); if (spec.complexity != null) o.complexity = spec.complexity; if (spec.melodySeed != null) o.leadSeed = spec.melodySeed;
+  if (spec.length) o.length = spec.length;
   if (spec.form) o.sections = spec.form.map((S) => { const x = { type: S.section, bars: S.bars, name: S.name || S.section };
     if (S.layer == null) x.layer = SPEC_DEFAULT_LAYER[S.section]; else if (typeof S.layer === 'string') x.layer = S.layer; else { x.layer = 'custom'; x.L = Object.assign({}, S.layer); if (S.section === 'build' && x.L.riser == null) x.L.riser = 1; }
     if (S.drums != null) x.dv = (Array.isArray(S.drums) ? S.drums : [S.drums]).map((n) => names.drums.indexOf(n));
