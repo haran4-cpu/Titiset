@@ -35,6 +35,7 @@ This is a complete deep-house track. Add fields only to say something the genre 
 | `sound` | object | section 8 |
 | `mix` | `{ lufs, verb, delay, echo, sidechain, heat, punch }` | loudness target −20…−5, sends 0…1, `echo` 0…2 = the harmonic echo send, sidechain pump 0…0.9; `heat` 0…2 = saturation on every channel (warmth, grit; 1 = the genre's own), `punch` 0…2 = transient shaping on the drums |
 | `notes` | string | free text for people; ignored by the engine |
+| `length` | `radio club extended` | (v9.4) how long the generated form is when no `form` is written: Radio about 3–4 minutes, Club 6–8 (house, techno), Extended about 1.4× Club |
 
 ## 3. Form: the arrangement
 `form` is an ordered list of sections. Each section has:
@@ -142,6 +143,7 @@ Rules for melodies that sound good:
 ```
 - Slots: `kick snare hats perc bass chords pad lead arp`.
 - Synth models: `sub b808 reese acid pluck wobble fm organ log supersaw pad stab piano ep bell kspluck vox hoover screech strings brass lead saw square wt`.
+- (v9.4) Eight more engines: `fm4` (4-operator FM: `algo` 0–7, `r1…r4` ratios, `i2…i4` indexes, `fb` feedback, `md`/`ms` the modulators' decay and sustain), `pd` (phase distortion: `pdw` 0 saw · 1 square · 2 resonant, `dcw` 0–1, `det2` detune), `add` (additive: `tilt`, `odd`, `fpk` formant Hz, `fwd`, `shimmer`, `stretch`), `modal` (struck: `mat` 0 marimba · 1 vibes · 2 glass · 3 bell · 4 kalimba · 5 wood · 6 steel · 7 tube, `hard`), `grain` (granular: `gsize` s, `density`, `scan`, `gjit`, `noiseAmt`), `hyper` (nine saws: `detune`, `oct2`), `va` (two oscillators: `osc1`/`osc2` 0 saw · 1 square · 2 triangle · 3 sine, `det2` semitones, `oct2`, `sync`, `ring`, `xmod`, `pw`), `pluck2` (string: `body`, `pick`, `bright`). On these, `flt` picks the filter (−1 the engine's own, 0 none, 1 ladder, 2 12 dB, 3 MS-20-style, 4 SEM-style with `fmorph`, 5 diode, 6 band-pass, 7 formant with `vow`/`vowLfo`), `dtype` the drive (0 none, 1 soft, 2 tape, 3 fold, 4 crush, 5 tube) with `drv` 0–1, and `stereo` 0–1 the width.
 - Synth parameters:
   - Filter: `cut` (Hz), `res` (0–0.9), `envAmt` (0–1), `fDec` (s).
   - Envelope: `aAtk aDec aSus aRel` (s, except `aSus` 0–1).
