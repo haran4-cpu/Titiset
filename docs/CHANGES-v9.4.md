@@ -45,13 +45,13 @@
   - what comes between the drops, and how it comes down before the outro.
 
   Over 20 tracks per genre, 19–20 forms are different in every genre.
-- **Lengths:** **Radio** (about 3–4 minutes), **Club** (the default: 6–8 minutes for house and techno, 7–9 for psytrance, 5–6.5 for drum & bass), **Extended** (about 1.4× Club). Choose it under SET → "New tracks".
+- **Lengths:** **Radio** (about 3–4½ minutes; about 3 for the pop-length styles), **Club** (the default: 6–8 minutes for house and techno, 7–9 for psytrance, 5–6.5 for drum & bass), **Extended** (about 1.4× Club). Choose it under SET → "New tracks".
 - **Builds are no longer all alike.** Each build combines:
   - a drum shape: the classic roll, a late roll over a running groove, a kick roll, a clap build, a tom run, half-time drums, or no drums;
   - an effect: noise riser, pitched rise, noise sweep, reverse cymbal, swirl, zap, or none;
   - an ending: beat repeat, tape stop, echo throw, a half-beat gap, a full beat of air, or a straight cut.
 
-  No track repeats a combination or uses the same shape or effect twice in a row, and the noise riser is under **at most every other build: 48 % of 596 builds** measured. Breakdowns are entered as many ways (downlifter, crash, sweep or a dry cut, after an echo freeze, a tape stop, a stutter or nothing). A breakdown that goes straight into its drop ends on a fill, a reverse cymbal, half a beat of air, or nothing.
+  No track repeats a combination or uses the same shape or effect twice in a row, and the noise riser is under **at most every other build: 49 % of 1116 builds** measured (20 Club tracks of every genre, `tools/form_test.cjs`). Breakdowns are entered as many ways (downlifter, crash, sweep or a dry cut, after an echo freeze, a tape stop, a stutter or nothing). A breakdown that goes straight into its drop ends on a fill, a reverse cymbal, half a beat of air, or nothing.
 - **A second melodic voice (LEAD 2).** Where a genre has no arpeggio or hook of its own, a track may add one:
   - an **answer** that speaks in the lead's rests (call and response);
   - a **counter-line** below the lead in longer notes;

@@ -1,40 +1,38 @@
-FORGE 9.3 — listening guide
+FORGE 9.4 — listening guide
 ===========================
 
-All files are rendered by FORGE's own engine (the same code the app plays), 256 kb/s MP3. Levels are in LEVELS-*.txt.
-Best on headphones or good speakers. Nothing here is a sample of another record or machine.
+All files are rendered by FORGE's own engine (the same code the app plays) and encoded by FORGE's own MP3 encoder at
+320 kb/s — so the pack is also a test of the encoder. Length, loudness and true peak of every file are in LEVELS.txt,
+with the sounds each track drew. Best on headphones or good speakers. Nothing here is a sample of another record or machine.
 
-1. DRUMS — one groove, seven kits  (drums-*-v9.3.mp3)
-   The same tech-house drop, the same notes, only the kit changes:
-     drums-forge   the 9.2 synthesized voices (for comparison)
-     drums-808     808-style: soft square-wave hats, tonal snare, long clap tail
-     drums-909     909-style: bright 6-bit cymbals, punchy noise snare
-     drums-707     707-style: crisp 8-bit µ-law snare and hats
-     drums-linn    Linn-style: 28 kHz / 8-bit sampled character, round snare
-     drums-acoustic  membrane modes, snare wires that rattle with the head, a small room
-     drums-lofi    dark, saturated, 22 kHz tape-ish
-   Listen for: the hats no longer sound identical hit to hit (three variants in rotation, softer hits darker);
-   the open hat is choked by the next closed hat; the snare has body, wires and a room.
+1. TRACKS — four new tracks of one genre  (tracks-<genre>-1…4.mp3)
+   melodic techno, deep house, psytrance, drum & bass: the first drop (8 bars) of four tracks each.
+   In 9.3 four tracks of a genre shared most of their sounds. In 9.4 each draws its own lead, chords, pad, bass, arp and
+   often its own kit family, from the genre's palette across the eight new engines, varied for that track.
+   Listen for: four tracks of a genre that sound like four records, not four takes of one.
 
-2. HARMONY — where the chords meet the kick  (harmony-*-v9.2.mp3 vs harmony-*-v9.3.mp3)
-   Same genre, same seed, before and after:
-     deep-house drop, melodic-techno drop, trance break, dnb drop, house groove
-   In 9.2 every chord change lands on the downbeat with the kick. In 9.3 listen for changes that arrive a 16th or an 8th
-   early (pushed, the house "anticipation"), or an 8th after the kick (the techno / dub entrance), and section starts that
-   do not all hit on the one.
+2. KITS — one groove, six new kit families  (kit-<family>.mp3)
+   The same tech-house drop, the same notes, only the kit family changes:
+     kit-cr78        CR-78-style soft analog: short "tss" hats, a popping snare, blips for the hand drums, no hard edges
+     kit-minimal     dry and clipped: every voice shortened, thinner snares, nothing rings
+     kit-industrial  metal and distortion: plates under the snare, folded hats, an anvil for a cowbell, a big hard room
+     kit-vintage     a break from an old record: a bigger room, the kit pushed into tape, a narrower band
+     kit-trap        808-style, but tight: very bright hats, a snapping clap, a crisp snare
+     kit-garage      crisp and short: skippy hats with a little shaker in them, a high snappy snare, a woody rim
 
-3. TRANSITIONS — the same two tracks, ten ways  (transition-*.mp3)
-   house → tech house, each file = 2 bars before the mix, the mix, 2 bars after:
-     blend      EQ blend, the bass swaps on a bar line in the middle
-     filter     B opens from a low-pass while A climbs into a high-pass
-     echo       A leaves into its own tempo echo
-     stems      drums change hands at 1/4, bass at the middle, music at 3/4
-     breakdown  B's music (no drums, no bass) over A's groove, then the rest of B on the line
-     tease      two one-bar glimpses of B, then a blend
-     cut        drop swap: B's first drop lands on the line, A's last beat thrown into the delay
-     roll       A's last bar rolls 1/4 → 1/8 → 1/16 into the cut
-     brake      A's tape stops on the last beat
-     riser      a noise riser and a high-pass climb over A, B lands on the line
+3. BUILDS — builds of different shapes into their drops  (build-<shape>-<genre>.mp3)
+   The last 8 bars of a build and the first 4 of its drop. Each build combines a drum shape, an effect and an ending
+   (LEVELS.txt names all three). In 9.3 every build carried the same noise riser.
 
-What to send back: which kit sounds closest to what you want per genre; any harmony excerpt where the push or the late
-entry feels wrong; which transitions you would never use (Auto-DJ can be told to avoid them).
+4. LEAD 2 — a second melodic voice  (lead2-<mode>-<genre>.mp3)
+     answer   speaks in the lead's rests (call and response)
+     counter  a counter-line below the lead, in longer notes
+     motif    where the genre has no lead: a motif over the drop
+
+5. LENGTH AND EXTEND  (full-melodic-techno.mp3, extended-melodic-techno.mp3)
+     full-…      one whole melodic-techno track at the Club length (the form is in LEVELS.txt)
+     extended-…  the same track from 8 bars before the end of its last drop, with Extend pressed there: one more act
+                 in the track's own style, then its outro. Nothing before the splice changes.
+
+What to send back: tracks of one genre that still sound too alike; sounds you would never want (name the file and the
+part — LEVELS.txt lists the presets); builds or LEAD 2 lines that feel wrong; whether Club length is right for you.

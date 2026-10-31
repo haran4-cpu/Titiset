@@ -79,9 +79,9 @@ function makeForm(G, r, len) { const st = G.form, F = [], ch = (a) => a[Math.flo
   if (st === 'chill' || st === 'ambient') { const A = st === 'chill' ? ['chillA', 'chillB'] : ['ambA', 'ambB'], nSec = len === 'radio' ? 2 + Math.floor(r() * 3) : len === 'extended' ? 6 + Math.floor(r() * 4) : 3 + Math.floor(r() * 4); add('intro', ch([8, 16]), st === 'chill' ? 'intro' : 'ambA');
     for (let k = 0; k < nSec; k++) { if (k > 0 && r() < 0.25) add('break', 8, st === 'chill' ? 'break2' : 'ambA'); add('groove', ch(st === 'chill' ? [8, 16, 16, 24] : [16, 24, 32]), A[(k + (r() < 0.2 ? 1 : 0)) % 2]); }
     add('outro', ch([8, 16]), st === 'chill' ? 'outro' : 'ambA'); return F; }
-  if (st === 'pop') { add('intro', 8, 'drums1'); if (r() < 0.6) add('intro', 8, 'intro'); const n = Math.max(2, nDrops + (len === 'extended' ? 1 : 0));
-    for (let k = 0; k < n; k++) { if (k === n - 1 && n > 2 && r() < 0.6) add('break', 8, 'break2'); else { add('groove', ch([8, 16, 16]), 'verse'); if (r() < 0.75) add('build', ch([4, 8]), 'build'); } add('drop', ch([16, 16, 24, 32]), 'drop'); }
-    add('outro', ch([8, 16]), 'outro'); return F; }
+  if (st === 'pop') { const rad = len === 'radio'; add('intro', 8, 'drums1'); if (r() < (rad ? 0.2 : 0.6)) add('intro', 8, 'intro'); const n = Math.max(2, nDrops + (len === 'extended' ? 1 : 0));
+    for (let k = 0; k < n; k++) { if (k === n - 1 && n > 2 && r() < 0.6) add('break', 8, 'break2'); else { add('groove', ch(rad ? [8, 8, 8, 16] : [8, 16, 16]), 'verse'); if (r() < (rad ? 0.5 : 0.75)) add('build', ch(rad ? [4, 4, 8] : [4, 8]), 'build'); } add('drop', ch(rad ? [16, 16, 16, 24] : [16, 16, 24, 32]), 'drop'); }
+    add('outro', ch(rad ? [8, 8, 8, 16] : [8, 16]), 'outro'); return F; } /* (a radio edit of a pop-length song is about 3 minutes: its sections are drawn short, or 60 draws rarely found one that short — measured, reggaeton) */
   // the opening
   const dj = st === 'club' || st === 'deep' || st === 'techno' || st === 'garage' || st === 'trance' || st === 'hard';
   const intro = st === 'bass' ? ch(['atmos', 'short']) : st === 'psy' ? 'dj1' : st === 'dnb' ? ch(['dj1', 'dj2']) : ch(['dj2', 'dj2', 'dj1', 'groovy']); // (a mixable track opens on its drums, and its first section after the intro is a groove: an Auto-DJ handover that landed on an intro without drums, or on a breakdown, sagged — measured)

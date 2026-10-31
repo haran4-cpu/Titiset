@@ -43,7 +43,29 @@ const OUT = process.argv[2] || '.'; let fails = 0; const ok = (c, m) => { consol
   ok(await F(() => window.__forge.decks[0].score.meta.gid === 'deep-house' && window.__forge.decks[0].hot[0] != null), 'set loaded back: deep-house with hot cue 1');
   // recording
   await page.click('#recBtn'); await page.waitForTimeout(1500); const dl = page.waitForEvent('download', { timeout: 5000 }).catch(() => null); await page.click('#recBtn'); const d = await dl;
-  ok(!!d && /\.(webm|ogg|m4a)$/.test(d.suggestedFilename()), 'recording produces a file: ' + (d ? d.suggestedFilename() : 'none'));
+  ok(!!d && /\.(webm|ogg|m4a)$/.test(d.suggestedFilename()), 'recording with the split cue on (the browser recorder) produces a file: ' + (d ? d.suggestedFilename() : 'none'));
+  // (v9.4) with the cue off, the set is recorded as an MP3 320 by FORGE's own encoder as it plays: a file of whole MPEG-1 Layer III
+  // frames at 320 kbit/s, as long as the recording, that the browser decodes to sound
+  { await F(() => window.__forge.perf.routeCue('off')); await page.waitForTimeout(300); if (!(await F(() => window.__forge.decks[0].playing))) { await F(() => window.__forge.playPause(0)); await page.waitForTimeout(1200); }
+    await page.click('#recBtn'); await page.waitForTimeout(3000); const dl2 = page.waitForEvent('download', { timeout: 20000 }).catch(() => null); await page.click('#recBtn'); const d2 = await dl2;
+    let msg = 'no file'; let good = false; if (d2) { const fp = OUT + '/set-recording.mp3'; await d2.saveAs(fp); const b = require('fs').readFileSync(fp); let o = 0, n = 0, bad = 0; const SR = [44100, 48000, 32000];
+      while (o + 4 <= b.length) { if (b[o] !== 0xff || (b[o + 1] & 0xfe) !== 0xfa || (b[o + 2] >> 4) !== 14) { bad++; break; } const sr = SR[(b[o + 2] >> 2) & 3], len = Math.floor(144 * 320000 / sr) + ((b[o + 2] >> 1) & 1); o += len; n++; }
+      const dec = await F(async (b64) => { try { const u = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)); const buf = await new OfflineAudioContext(2, 48000, 48000).decodeAudioData(u.buffer); const x = buf.getChannelData(0); let e = 0; for (let i = 0; i < x.length; i++) e += x[i] * x[i]; return { dur: buf.duration, rms: Math.sqrt(e / Math.max(1, x.length)) }; } catch (er) { return { err: String(er) }; } }, b.toString('base64'));
+      good = /\.mp3$/.test(d2.suggestedFilename()) && !bad && o === b.length && n * 1152 / 48000 > 2 && dec.dur > 2 && dec.rms > 1e-3;
+      msg = `${d2.suggestedFilename()}: ${n} frames, ${bad ? 'a bad frame header' : o === b.length ? 'whole frames' : 'a cut last frame'}, decoded ${dec.err || dec.dur.toFixed(1) + ' s, rms ' + dec.rms.toFixed(3)}`; }
+    ok(good, 'MP3 set recording (cue off): ' + msg); }
+  // (v9.4) EXTEND: the playing track grows by one act on the same deck, with no transition; what has played stays as it was
+  { const i = await F(() => +document.querySelector('.tp-ext').dataset.deck || 0);
+    const b0 = await F((i) => { const D = window.__forge.decks[i], S = D.score.sections; return { bars: D.score.meta.bars, secs: S.map((x) => x.type + x.bars), playing: D.playing }; }, i);
+    await F(() => document.querySelector('.tp-ext [data-ext=extend]').click());
+    const grown = await page.waitForFunction(([i, n]) => window.__forge.decks[i].score.meta.bars > n, [i, b0.bars], { timeout: 20000 }).then(() => true).catch(() => false);
+    const b1 = await F((i) => { const D = window.__forge.decks[i]; return { bars: D.score.meta.bars, secs: D.score.sections.map((x) => x.type + x.bars), playing: D.playing, ext: D.spec.ext || 0 }; }, i);
+    const k = b1.secs.findIndex((x, j) => x !== b0.secs[j]); /* the first section that differs: the splice (or the outro that was cut) */
+    ok(grown && b1.playing === b0.playing && b1.ext === 1 && k > 0, `Extend (PLAY): deck ${'AB'[i]} grows from ${b0.bars} to ${b1.bars} bars on the same deck (${b0.secs.length} → ${b1.secs.length} sections, the first ${k} unchanged), still ${b1.playing ? 'playing' : 'paused'}`);
+    await F(() => document.querySelector('.tp-ext [data-ext=endless]').click()); await page.waitForTimeout(100);
+    const on = await F((i) => window.__forge.ext.EXT.endless[i] && document.querySelector('.tp-ext [data-ext=endless]').getAttribute('aria-pressed') === 'true', i);
+    await F(() => document.querySelector('.tp-ext [data-ext=endless]').click()); await page.waitForTimeout(100);
+    ok(on && await F((i) => !window.__forge.ext.EXT.endless[i], i), 'Endless switches on and off (the button shows it)'); }
   // v7.1: fills, XY pad, part macros, build → drop, the Chords tab and the sound browser
   await F(() => { window.__sent = []; window.__forge.A2.sendTap = (m) => window.__sent.push(m); window.__forge.perf.setPerform(true); }); await page.waitForTimeout(400); await page.screenshot({ path: OUT + '/perform_v71.png', fullPage: true });
   // synthetic pointer events in the page (the view re-lays out while meters run; the handlers are what is under test)

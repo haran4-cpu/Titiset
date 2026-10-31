@@ -1,5 +1,10 @@
 # FORGE — changes
 
+- **9.4** — docs/CHANGES-v9.4.md: eight new synthesis engines, 403 presets tagged by character, six new drum kit families, 32
+  percussion instruments, a sound palette drawn for every track; forms from a grammar with Radio / Club / Extended lengths; builds
+  of many shapes (the noise riser under at most half of them); a second melodic voice and a top percussion loop; Extend · Ride ·
+  Endless on the playing deck; MP3 320 export and set recording through FORGE's own encoder; 24-bit WAV.
+
 - **9.3** — docs/CHANGES-v9.3.md: drum kit families (808/909/707/Linn-style, acoustic, lo-fi) rendered off the audio thread, your own
   samples; chords pushed or late against the kick; a drum skeleton per track; Beat FX on a deck or one part, Color FX; ten transition
   styles chosen by Auto-DJ; the five-screen phone-first UI (one home per control); an installable offline page; an Android project.

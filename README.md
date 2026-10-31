@@ -5,6 +5,14 @@ swing, drum grammar, bass grammar, harmony, arrangement form, sound kits, mix ta
 engine that times every event to the sample. Two decks, phrase-aligned key-compatible mixing with a bass swap,
 quantised jumps and loops, live re-composition (key / mode / progression / tempo / variation) on the next bar line.
 
+## 9.4 in one paragraph
+Many more sounds: eight new synthesis engines (4-operator FM, phase distortion, additive, struck/modal, granular, hyper saw,
+two-oscillator analog, plucked string) with seven filters and five drives, 403 presets tagged by character, six new drum kit
+families and 32 percussion instruments; every track draws its own sounds, varied for it. Forms drawn from a grammar (false drops,
+lifts, peaks; Radio / Club / Extended lengths, Club 6–8 minutes); builds that differ in drum shape, effect and ending; a second
+melodic voice (answer, counter-line, motif) and a top percussion loop; Extend · Ride · Endless keep one track going on its deck.
+MP3 320 export and set recording through FORGE's own encoder; 24-bit WAV. Details: docs/CHANGES-v9.4.md.
+
 ## 9.3 in one paragraph
 Real drum kit families and your own samples; chords that push and lag against the kick instead of always landing on the one; a drum
 skeleton of its own for every track; Beat FX (delay, dub echo, reverb, filter, roll, brake …) on a deck or one part, a Color FX knob;
@@ -19,6 +27,7 @@ src/engine/02_drums.js       kick (tempo-aware length), snare/clap/rim, 808-meta
 src/engine/02b_wavetable.js  wavetable oscillator: frames (single cycles) the voice morphs through
 src/engine/02c_drumbank.js   (9.3) drum kit families: one-shots rendered off the audio thread (808/909/707/Linn-style, acoustic, lo-fi), round robin, Tune/Decay/Tone/Snap, user samples
 src/engine/03_synth.js       one voice type, 25 models; click-free hand-over (tail voices); tuned Karplus-Strong; envelopes fitted to harmonic rhythm
+src/engine/03x_engines.js    (9.4) eight more engines (FM4, phase distortion, additive, modal, granular, hyper saw, two-osc analog, plucked string), seven filters, five drives — in JavaScript
 src/engine/03v_wasm.js       the voice's inner loop as WebAssembly (src/wasm/voice.c → 03w_voice_wasm.js, generated), bit-identical to the JavaScript
 src/engine/04_music.js       modes, roman-numeral parser, DIATONIC 7th/9th extension, voice leading, pattern DSL
 src/engine/05_genres.js      genre bible part 1 (11 contracts)   05b_genres2.js  part 2 (22 contracts)
@@ -35,9 +44,11 @@ src/host/engine_worker.js    Worker host of the Buffered (formerly Stable) engin
 src/compose/composer.js      plan → score (struct-of-arrays events), hooks with a melodic grammar, bass grammar, chords/pad/arp/chop/seq roles, fills, builds
 src/compose/spec.js          FORGE Score Format v1: validate (path + fix on every message) → compile → score; export any score back; melody text; lint
 src/ui/                      English UI (index.html template, app.js decks/mixer/library, dock.js bottom editor, midi.js controller layer,
-                             perform.js Perform view / hot cues / headphone cue / set save-load / recording, ai.js the Ask bar, ai_models.js the AI providers, style.css)
+                             perform.js Perform view / hot cues / headphone cue / set save-load / recording (MP3), extend.js Extend · Ride · Endless, ai.js the Ask bar, ai_models.js the AI providers, style.css)
 src/host/selfcheck.js        the hardware check (dist/selfcheck.html): a panel that plays one track on YOUR machine and measures it (see "Checking a real machine")
-src/compose/bank.js          the sound bank: curated presets per slot (level-matched in context by spec.js)
+src/compose/bank.js          the sound bank: curated presets per slot (level-matched in context by spec.js); each track's own palette pick (character, engines, masking)
+src/compose/bank2.js         (9.4) the 273 new presets, their character tags, genre fit, kit families per genre, per-track variation (varyKit)
+src/compose/mp3.js           (9.4) MP3 320 joint-stereo encoder (src/wasm/mp3enc.c, FORGE's own, built by tools/mp3_build.cjs into mp3_wasm.js)
 src/compose/part_ref.js …    generated measurements used by the composer and the editor (part_ref.js, model_params.js, preset_gain.js; see tools/)
 docs/STRATEGY.md             where FORGE stands, the open space in the market, the five levers, what a release means
 docs/NATIVE-ENGINE.md        plan: one Rust DSP core for WASM, native hardware and plug-ins, proven by the same test bed
