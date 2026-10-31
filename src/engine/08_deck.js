@@ -117,7 +117,7 @@ class Deck {
       case 0: this.kick.trigger(off, v); this.mix.kick(off); break;
       case 1: this.hitSnare(off, v, SNARE_KIND[a | 0]); break;
       case 2: this.hitHat(off, v, a | 0, E.y[i]); break;
-      case 3: this.hitPerc(off, v, PERC_NAMES[(f >> 2) & 15] || 'conga', a, E.y[i]); break;
+      case 3: this.hitPerc(off, v, PERC_NAMES[(f >> 2) & 31] || 'conga', a, E.y[i]); break;
       case 9: this.fx.trigger(off, a | 0, v, E.d[i] * this.sps, E.x[i], E.y[i]); break; // x = the note an ear-candy FX lands on, y = its pan (0 = the engine picks)
       case 11: { const k = autoIndex(a, f), d = E.d[i]; this.autoTgt[k] = v; this.autoRate[k] = d > 0.01 && !AUTO_STEP.has(k) ? Math.abs(v - this.autoCur[k]) / d : 1e9; break; } // automation: see autoIndex — a target and a ramp over d steps
       case 10: if (E.d[i] < 0) { this.tex.setChord(f, E.x[i]); this.mix.reso.setChord(f, E.x[i]); } else this.tex.set(a | 0, v, E.d[i] * this.sps); break; // texture level ramp, or (d < 0) the chord: the texture and the resonator tune to it

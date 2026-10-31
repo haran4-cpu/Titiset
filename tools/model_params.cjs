@@ -2,7 +2,7 @@
 // knob moved across its range vs as default; a knob whose move changes nothing (< −40 dB) is dead for that model and the
 // editor hides it. Writes src/compose/model_params.js. Usage: node tools/model_params.cjs
 const { load } = require('./load.cjs'); const X = load(); const fs = require('fs');
-const MODELS = ['sub', 'b808', 'reese', 'acid', 'pluck', 'wobble', 'fm', 'organ', 'log', 'supersaw', 'pad', 'stab', 'piano', 'ep', 'bell', 'kspluck', 'vox', 'hoover', 'screech', 'strings', 'brass', 'lead', 'saw', 'square', 'wt'];
+const MODELS = Object.keys(X.MODEL || {}).length ? Object.keys(X.MODEL) : ['sub', 'b808', 'reese', 'acid', 'pluck', 'wobble', 'fm', 'organ', 'log', 'supersaw', 'pad', 'stab', 'piano', 'ep', 'bell', 'kspluck', 'vox', 'hoover', 'screech', 'strings', 'brass', 'lead', 'saw', 'square', 'wt'];
 const K = [['cut', 300, 6000], ['res', 0, 0.85], ['envAmt', 0, 1], ['fDec', 0.02, 1], ['aAtk', 0.002, 0.4], ['aDec', 0.05, 1.5], ['aSus', 0.2, 1], ['aRel', 0.05, 1.5], ['detune', 0, 1], ['drive', 1, 4], ['glide', 0, 0.3], ['width', 0, 1], ['gain', 0.5, 1.3], ['lfoSync', 0.5, 4], ['lfoDepth', 0, 0.8], ['lfoAmp', 0, 0.8], ['tone', 1, 0.3]];
 const ctx = { lfoSync: 1, lfoDepth: 0.4, lfoAmp: 0, aSus: 0.6, envAmt: 0.5, fDec: 0.3 };
 function render(kit, mono) { X.noiseSeed(3); const S = new X.Synth(44100, mono ? 1 : 6, mono); S.setKit(kit); if (mono) { S.trigger(0, 45, 0.9, 30000); S.trigger(30000, 52, 0.9, 30000, { slide: true }); } else { S.trigger(0, 57, 0.9, 40000); S.trigger(0, 64, 0.9, 40000); }

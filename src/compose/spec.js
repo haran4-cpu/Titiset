@@ -157,7 +157,7 @@ function specKits(spec) { const { G } = deriveContract(spec); return { kick: G.k
 
 // ---------- compile ----------
 function deriveContract(spec) {
-  const G = JSON.parse(JSON.stringify(GENRE_BY_ID[spec.genre])); const names = { drums: [], bass: [], match: [] };
+  const G = withLead2(JSON.parse(JSON.stringify(GENRE_BY_ID[spec.genre])), spec.genre, spec.seed != null ? spec.seed : hashStr(JSON.stringify(spec)) % 100000); const names = { drums: [], bass: [], match: [] }; // (v9.4) the same second voice a new track gets
   if (spec.swing != null) G.swing = spec.swing;
   const H = spec.harmony || {}; if (H.barsPerChord && H.barsPerChord !== G.harm.hr) { G.harm.hr = H.barsPerChord; delete G.harm.breakHr; } if (H.breakBarsPerChord) G.harm.breakHr = H.breakBarsPerChord; if (H.extension) G.harm.ext = H.extension;
   const D = spec.drums || {}; if (D.patterns) { G.userDrums = true; G.drums.main = Object.entries(D.patterns).map(([name, p]) => { names.drums.push(name); const v = {};
@@ -178,8 +178,8 @@ function deriveContract(spec) {
   for (const [k, v] of Object.entries(S)) if (slot[k]) { const base = Object.assign({}, slot[k]); const pre = v.preset ? presetKit(k, v.preset) : null;
     if (pre && SOUND_CENTER[k]) { for (const key of Object.keys(slot[k])) delete slot[k][key]; Object.assign(slot[k], pre); } else if (pre) Object.assign(slot[k], pre); // a synth preset replaces the sound; a drum preset reshapes the genre's drum
     if (pre && (k === 'snare' || k === 'hats' || k === 'perc')) slot[k].synth = 1; // (v9.3) a drum sound chosen from the bank is a synthesized voice: that part leaves the kit family
-    const rest = Object.assign({}, v); delete rest.preset; Object.assign(slot[k], rest);
-    if (pre || (SOUND_CENTER[k] && TIMBRE_KEYS.some((t) => v[t] != null))) { slot[k].gain = v.gain != null ? v.gain : k === 'perc' && pre && pre.gain != null ? pre.gain : base.gain != null ? base.gain : 1; names.match.push({ slot: k, base, preset: v.preset && Object.keys(v).length === 1 ? v.preset : null }); } } // level matched in context after composing (compileSpec)
+    const rest = Object.assign({}, v); delete rest.preset; delete rest.vary; Object.assign(slot[k], rest); if (v.vary != null && SOUND_CENTER[k]) varyKit(slot[k], v.vary); // (v9.4) this track's cut of the preset
+    if (pre || (SOUND_CENTER[k] && TIMBRE_KEYS.some((t) => v[t] != null))) { slot[k].gain = v.gain != null ? v.gain : k === 'perc' && pre && pre.gain != null ? pre.gain : base.gain != null ? base.gain : 1; names.match.push({ slot: k, base, preset: v.preset && Object.keys(v).filter((q) => q !== 'vary').length === 1 ? v.preset : null }); } } // level matched in context after composing (compileSpec)
   const M = spec.mix || {}; if (M.lufs != null) G.mix.lufs = M.lufs; if (M.verb != null) G.mix.verb = M.verb; if (M.delay != null) G.mix.delay = M.delay; if (M.sidechain != null) G.mix.sc = M.sidechain; if (M.heat != null) G.mix.heat = M.heat; if (M.punch != null) G.mix.punch = M.punch; if (M.echo != null) G.mix.echo = M.echo;
   return { G, names };
 }
@@ -208,6 +208,7 @@ function compileSpec(spec, opts) {
     let f = useTable ? pg : contextMatch(score, m.slot, m.base, kit); if (f == null) f = SOUND_CENTER[m.slot] ? levelMatch(m.slot, m.base, kit) : 1;
     if (useTable) (score.levelPending = score.levelPending || []).push({ slot: m.slot, key, base: m.base, g0 }); // refined later by refineLevels (exact, in context)
     kit.gain = g0 * f; const gk = { kick: G.kit.kick, snare: G.kit.snare, hats: G.kit.hats, bass: G.bass.kit, chords: G.chords.kit, pad: G.pad && G.pad.kit, lead: G.lead && G.lead.kit, arp: (G.arp || G.hook) && (G.arp || G.hook).kit }[m.slot]; if (gk && gk !== kit) gk.gain = kit.gain; }
+  if (typeof syncLead2 !== 'undefined') syncLead2(score); // (v9.4) LEAD 2 follows the line it accompanies
   score.spec = spec; score.validation = v; return score;
 }
 const CM_CACHE = new Map(), CM_CH = { kick: 0, snare: 1, hats: 2, bass: 4, chords: 5, pad: 6, lead: 7, arp: 8 };
@@ -225,7 +226,8 @@ function normalizeParts(score) { const ref = typeof PART_REF !== 'undefined' ? P
 // the exact in-context level of sounds that started from the pre-measured table (a palette sound on a new track): run when the
 // UI is idle; returns [{ slot, gain }] for the parts whose level moves by more than 0.3 dB
 function refineLevels(score) { const out = []; for (const p of score.levelPending || []) { const kit = score.kits[p.key]; if (!kit) continue; const f = contextMatch(score, p.slot, p.base, Object.assign({}, kit, { gain: p.g0 })); if (f == null) continue;
-    const g = p.g0 * f; if (Math.abs(20 * Math.log10(g / kit.gain)) > 0.3) { kit.gain = g; out.push({ slot: p.slot, gain: g }); } } score.levelPending = null; return out; }
+    const g = p.g0 * f; if (Math.abs(20 * Math.log10(g / kit.gain)) > 0.3) { kit.gain = g; out.push({ slot: p.slot, gain: g }); } } score.levelPending = null;
+  if (typeof syncLead2 !== 'undefined') { const g2 = syncLead2(score); if (g2 != null) out.push({ slot: 'arp', gain: g2 }); } return out; } // (v9.4) LEAD 2 follows the line it accompanies
 function contextMatch(score, slot, baseKit, newKit) { const ch = CM_CH[slot], ev = score.ev, key = [slot, score.meta.gid, Math.round(score.meta.bpm), (score.mix || {}).heat, (score.mix || {}).punch, JSON.stringify(baseKit), JSON.stringify(Object.assign({}, newKit, { gain: 1 }))].join('|');
   if (CM_CACHE.has(key)) return CM_CACHE.get(key);
   const sec = peakSectionOf(score); let t0 = sec.bar0 * 16, idx = []; const pick = (from) => { const out = []; for (let i = 0; i < ev.n; i++) if (ev.ch[i] === ch && ev.t[i] >= from && ev.t[i] < from + 64) out.push(i); return out; };

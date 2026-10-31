@@ -60,9 +60,10 @@ class Synth {
     const pan = opt && opt.pan != null ? opt.pan : 0; v.gl = Math.cos((clamp(pan, -1, 1) + 1) * Math.PI / 4) * 1.414; v.gr = Math.sin((clamp(pan, -1, 1) + 1) * Math.PI / 4) * 1.414;
     if (this.m === MODEL.kspluck) { const per = clamp(sr / f, 9, 2390), Li = Math.floor(per - 0.6), dl = per - Li - 0.5; v.kl = Li; v.kz = (1 - dl) / (1 + dl); v.apx = 0; v.apy = 0; let z = 0; for (let i = 0; i <= Li + 1; i++) { z += (noise() - z) * (0.25 + 0.7 * P.bright); v.ks[i] = z; } v.kw = Li + 2; }
     if (this.m === MODEL.vox) { const F = VOWELS[(opt && opt.vowel) || P.vowel] || VOWELS.a; v.s1.set(F[0], 9, sr); v.s2.set(F[1], 11, sr); v.s3.set(F[2], 13, sr); v.vg = formantNorm(f, F); } else v.vg = 1;
+    if (this.m >= X_FIRST) initX(this, v, P, f, opt); // (v9.4) the engines of 03x_engines.js
   }
   releaseAll() { for (const v of this.v) if (v.on) { v.stage = 3; v.len = 0; } }
-  render(L, R, n) { const w = WV.ok && !WV.off; this.pv = (this.pv + 1) | 0; for (const v of this.v) if (v.on) { if (w) wasmVoice(this, v, L, R, n); else this.voice(v, L, R, n); } this.clock += n; } // the voice loop in WebAssembly when it loaded (03v_wasm.js), else in JavaScript
+  render(L, R, n) { const w = WV.ok && !WV.off; this.pv = (this.pv + 1) | 0; for (const v of this.v) if (v.on) { if (v.m >= X_FIRST) this.voiceX(v, L, R, n); else if (w) wasmVoice(this, v, L, R, n); else this.voice(v, L, R, n); } this.clock += n; } // the voice loop in WebAssembly when it loaded (03v_wasm.js), else in JavaScript
   voice(v, L, R, n) {
     // per-voice state lives in locals for the whole block (stored back once at the end): measured, the generic part of this
     // loop (envelopes, glide, LFO, field reads and writes) cost ~38 ns per voice-sample before a single oscillator ran
@@ -207,5 +208,5 @@ function copyVoice(a, b) { // complete state copy (no allocation) — used for c
   const L1 = a.lad, L2 = b.lad; L2.s1 = L1.s1; L2.s2 = L1.s2; L2.s3 = L1.s3; L2.s4 = L1.s4; L2.g = L1.g; L2.G = L1.G; L2.k = L1.k; L2.drive = L1.drive;
   copySvf(a.s1, b.s1); copySvf(a.s2, b.s2); copySvf(a.s3, b.s3); copySvf(a.s4, b.s4);
   for (let k = 0; k < 8; k++) { b.pa[k] = a.pa[k]; b.pd[k] = a.pd[k]; } b.e1 = a.e1; b.e2 = a.e2; b.e3 = a.e3; b.d1 = a.d1; b.d2 = a.d2; b.d3 = a.d3;
-  if (a.m === MODEL.kspluck || a.m === MODEL.wt) { b.ks.set(a.ks); b.kl = a.kl; b.kw = a.kw; b.kz = a.kz; b.apx = a.apx; b.apy = a.apy; } }
+  if (a.m === MODEL.kspluck || a.m === MODEL.wt || a.m === MODEL.grain || a.m === MODEL.pluck2) { b.ks.set(a.ks); b.kl = a.kl; b.kw = a.kw; b.kz = a.kz; b.apx = a.apx; b.apy = a.apy; } }
 const ORGAN_DRAW = [0.8, 1, 0.6, 0.8, 0.5, 0.4, 0.2, 0.15, 0.25];

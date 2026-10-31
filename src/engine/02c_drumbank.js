@@ -6,7 +6,11 @@
    genre calibration). Families describe a style (808-style, 909-style …), they are our own models, not samples of the machines.
    A bank is generated off the audio thread (the analysis worker) and handed to the engine; until it arrives a deck plays its
    synthesized voices. Every bank is identical everywhere: its noise comes from its own seeded generator, never from noise(). */
-const BANK_FAMILIES = ['808', '909', '707', 'linn', 'acoustic', 'lofi'];
+const BANK_FAMILIES = ['808', '909', '707', 'linn', 'acoustic', 'lofi', 'cr78', 'minimal', 'industrial', 'vintage', 'trap', 'garage'];
+// (v9.4) six more families, each built on the voices of an older one and then re-voiced: CR-78-style (soft analog blips, "tss" hats),
+// minimal (dry, clipped, precise), industrial (metal, distortion, a big room), vintage breaks (a roomy, compressed, taped kit),
+// trap (808-style with bright tight hats and a snapping clap), garage (707-style, crisp, short, skippy)
+const FAMILY_BASE = { cr78: '808', minimal: '909', industrial: '909', vintage: 'acoustic', trap: '808', garage: '707' };
 const BANK_VOICES = ['sn', 'cp', 'rim', 'hc', 'ho', 'hp', 'ride', 'crash', 'shk', 'tom', 'conga', 'bongo', 'cowbell', 'clave', 'tamb'];
 const BANK_F0 = { tom: 110, conga: 220, bongo: 400 }; // a pitched one-shot is rendered at this pitch; a note plays it faster or slower
 // playback level per voice, matched to the synthesized voice it replaces (tools/bank_level.cjs: equal RMS over the hit)
@@ -60,14 +64,14 @@ const DB_MEMBRANE = [1, 1.593, 2.136, 2.296, 2.653, 2.918, 3.156, 3.501]; // the
 // one voice of one family, one variant: a mono Float32Array at sr
 function genVoice(fam, v, variant, sr) {
   const R = rng((hashStr(fam + ':' + v) ^ Math.imul(variant + 1, 0x9E3779B1)) >>> 0), J = (a) => 1 + (R() * 2 - 1) * a, N = (s) => Math.round(s * sr);
-  const analog = fam === '808', crisp = fam === '909' || fam === '707', ac = fam === 'acoustic' || fam === 'linn' || fam === 'lofi';
+  const bf = FAMILY_BASE[fam] || fam, analog = bf === '808', crisp = bf === '909' || bf === '707', ac = bf === 'acoustic' || bf === 'linn' || bf === 'lofi';
   let y;
   // ---- snare: a membrane, a stick, the wires, a room ----
   if (v === 'sn') {
     if (analog) { y = dbPartials(N(0.45), sr, [[238 * J(0.01), 0.9, 0.07, 0.04, 0.01], [476 * J(0.01), 0.45, 0.045]], R); const nz = dbEnv(dbBq(dbBq(dbNoise(N(0.45), R), 'hp', 1500, 0.7, sr), 'lp', 9000, 0.7, sr), sr, 0.0008, 0.16 * J(0.06)); dbMix(y, nz, 0.75); }
     else if (crisp) { y = dbPartials(N(0.5), sr, [[185 * J(0.01), 1, 0.085, 0.14, 0.008], [330 * J(0.01), 0.55, 0.05, 0.1, 0.008]], R); dbSat(y, 1.6);
-      const nz = dbEnv(dbBq(dbBq(dbBq(dbNoise(N(0.5), R), 'hp', fam === '707' ? 1100 : 600, 0.7, sr), 'lp', fam === '707' ? 11000 : 8000, 0.7, sr), 'bp', 5000, 0.6, sr), sr, 0.001, (fam === '707' ? 0.14 : 0.19) * J(0.06), 0.0008); dbMix(y, nz, fam === '707' ? 1.9 : 1.6); }
-    else { const f0 = (fam === 'linn' ? 200 : 185) * J(0.02), n = N(0.6); y = dbPartials(n, sr, DB_MEMBRANE.slice(0, 6).map((r, i) => [f0 * r * J(0.006), [1, 0.62, 0.46, 0.36, 0.26, 0.2][i], [0.13, 0.09, 0.07, 0.06, 0.05, 0.04][i] * J(0.08), 0.045, 0.015]), R);
+      const nz = dbEnv(dbBq(dbBq(dbBq(dbNoise(N(0.5), R), 'hp', bf === '707' ? 1100 : 600, 0.7, sr), 'lp', bf === '707' ? 11000 : 8000, 0.7, sr), 'bp', 5000, 0.6, sr), sr, 0.001, (bf === '707' ? 0.14 : 0.19) * J(0.06), 0.0008); dbMix(y, nz, bf === '707' ? 1.9 : 1.6); }
+    else { const f0 = (bf === 'linn' ? 200 : 185) * J(0.02), n = N(0.6); y = dbPartials(n, sr, DB_MEMBRANE.slice(0, 6).map((r, i) => [f0 * r * J(0.006), [1, 0.62, 0.46, 0.36, 0.26, 0.2][i], [0.13, 0.09, 0.07, 0.06, 0.05, 0.04][i] * J(0.08), 0.045, 0.015]), R);
       dbMix(y, dbPartials(n, sr, [[470 * J(0.03), 0.22, 0.04]], R), 1); // the shell
       const stick = dbEnv(dbBq(dbNoise(n, R), 'hp', 3000, 0.7, sr), sr, 0.0002, 0.0018); dbMix(y, stick, 1.1);
       const wires = dbEnv(dbBq(dbBq(dbNoise(n, R), 'hp', 2200, 0.7, sr), 'lp', 9500, 0.7, sr), sr, 0.0012, 0.2 * J(0.08), 0.001); for (let i = 0; i < n; i++) wires[i] *= 0.65 + 0.35 * Math.abs(y[i]); // the wires rattle with the head
@@ -75,9 +79,9 @@ function genVoice(fam, v, variant, sr) {
   }
   // ---- clap: several hands a few ms apart, then the room ----
   else if (v === 'cp') { const n = N(0.7); y = new Float32Array(n);
-    if (!ac) { const bursts = fam === '808' ? 3 : 4, gap = (fam === '808' ? 0.0105 : 0.0085) * J(0.05), bpF = fam === '707' ? 1500 : fam === '909' ? 1200 : 1100;
+    if (!ac) { const bursts = bf === '808' ? 3 : 4, gap = (bf === '808' ? 0.0105 : 0.0085) * J(0.05), bpF = bf === '707' ? 1500 : bf === '909' ? 1200 : 1100;
       const nz = dbBq(dbBq(dbNoise(n, R), 'bp', bpF, 1.1, sr), 'hp', 700, 0.7, sr);
-      for (let i = 0; i < n; i++) { const t = i / sr; let e = 0; for (let b = 0; b < bursts; b++) { const tb = t - b * gap; if (tb >= 0) e += Math.exp(-tb / 0.0027) * (tb < gap || b === bursts - 1 ? 1 : 0); } const tt = t - bursts * gap; if (tt > 0) e += 0.55 * Math.exp(-tt / (fam === '808' ? 0.09 : 0.12)); y[i] = nz[i] * e; } }
+      for (let i = 0; i < n; i++) { const t = i / sr; let e = 0; for (let b = 0; b < bursts; b++) { const tb = t - b * gap; if (tb >= 0) e += Math.exp(-tb / 0.0027) * (tb < gap || b === bursts - 1 ? 1 : 0); } const tt = t - bursts * gap; if (tt > 0) e += 0.55 * Math.exp(-tt / (bf === '808' ? 0.09 : 0.12)); y[i] = nz[i] * e; } }
     else { const hands = 5 + (R() * 2 | 0); for (let h = 0; h < hands; h++) { const off = R() * 0.018, f = 1000 + R() * 1400, nz = dbEnv(dbBq(dbNoise(n, R), 'bp', f, 1.4, sr), sr, 0.0006, 0.004 + R() * 0.006, off); dbMix(y, nz, 0.6 + 0.4 * R()); }
       dbBq(y, 'hp', 600, 0.7, sr); dbMix(y, dbRoom(y, sr, 0.8, 0.3), 0.55); }
   }
@@ -95,7 +99,7 @@ function genVoice(fam, v, variant, sr) {
       y = new Float32Array(n); dbMix(y, m, 0.5); dbMix(y, nz, 0.6); dbEnv(y, sr, 0.0004, dec);
       const stick = dbEnv(dbBq(dbNoise(n, R), 'hp', 4500, 0.7, sr), sr, 0.0002, 0.0015); dbMix(y, stick, 0.5);
       if (pedal || !open) { const chick = dbEnv(dbBq(dbNoise(n, R), 'bp', 3800, 1.2, sr), sr, 0.0008, pedal ? 0.014 : 0.006); dbMix(y, chick, pedal ? 0.9 : 0.25); }
-      if (fam === '909') dbBits(y, 6); dbBq(y, 'hp', fam === '909' ? 6500 : 5200, 0.7, sr); }
+      if (bf === '909') dbBits(y, 6); dbBq(y, 'hp', bf === '909' ? 6500 : 5200, 0.7, sr); }
     dbFade(y, sr, open ? 0.12 : 0.03); }
   // ---- ride and crash: modal plates, a bell, a wash that blooms ----
   else if (v === 'ride' || v === 'crash') { const crash = v === 'crash', len = crash ? 2.2 : 1.6, n = N(len);
@@ -104,7 +108,7 @@ function genVoice(fam, v, variant, sr) {
       if (!crash) { const f0 = 640 * J(0.03); dbMix(y, dbPartials(n, sr, [1, 1.48, 2.21, 2.79, 3.62].map((r, i) => [f0 * r * J(0.005), [0.6, 0.45, 0.35, 0.3, 0.2][i], [1.2, 0.9, 0.8, 0.6, 0.5][i]]), R), 0.7); }
       const wash = dbEnv(dbBq(dbBq(dbNoise(n, R), 'hp', crash ? 2600 : 4000, 0.7, sr), 'lp', 11000, 0.7, sr), sr, crash ? 0.018 : 0.004, crash ? 0.7 : 0.4); dbMix(y, wash, crash ? 0.45 : 0.18);
       dbMix(y, dbEnv(dbBq(dbNoise(n, R), 'hp', 2000, 0.7, sr), sr, 0.0002, 0.002), crash ? 0.3 : 0.6); // the stick
-      if (fam === '909') dbBits(y, 6); }
+      if (bf === '909') dbBits(y, 6); }
     dbFade(y, sr, crash ? 0.35 : 0.25); }
   // ---- shaker: a back-and-forth of grains ----
   else if (v === 'shk') { const n = N(0.22); y = new Float32Array(n); const g1 = dbEnv(dbBq(dbBq(dbNoise(n, R), 'hp', 4500, 0.7, sr), 'lp', 11000, 0.7, sr), sr, 0.004, 0.022 * J(0.1));
@@ -122,12 +126,45 @@ function genVoice(fam, v, variant, sr) {
   else if (v === 'clave') { const n = N(0.16); y = analog || crisp ? dbPartials(n, sr, [[2500 * J(0.01), 1, 0.014]], R) : dbPartials(n, sr, [[2200 * J(0.02), 1, 0.022], [2200 * 2.32, 0.5, 0.011], [2200 * 3.4, 0.3, 0.008]], R); dbMix(y, dbEnv(dbNoise(n, R), sr, 0.0001, 0.0005), 0.3); }
   else if (v === 'tamb') { const n = N(0.4); y = dbMetalModes(n, sr, 28, 5000, 11500, 0.12, R, 0); dbMix(y, dbEnv(dbBq(dbNoise(n, R), 'hp', 6000, 0.7, sr), sr, 0.002, 0.05), 0.8); dbEnv(y, sr, 0.001, 0.09 * J(0.1)); dbFade(y, sr, 0.05); }
   else y = new Float32Array(N(0.05));
+  // ---- (v9.4) the new families re-voice what their base gave ----
+  const n0 = y.length, T = (i) => i / sr;
+  if (fam === 'cr78') { // soft analog: short "tss" hats from resonant noise, a popping snare, blips for the hand drums, no hard edges
+    if (v === 'hc' || v === 'ho' || v === 'hp') { y = dbEnv(dbBq(dbBq(dbNoise(n0, R), 'bp', 8800 * J(0.03), 3, sr), 'hp', 5200, 0.7, sr), sr, 0.0004, (v === 'ho' ? 0.11 : v === 'hp' ? 0.006 : 0.009) * J(0.08)); }
+    else if (v === 'sn') { y = dbPartials(N(0.3), sr, [[330 * J(0.01), 1, 0.03, 0.06, 0.004], [520 * J(0.01), 0.4, 0.02]], R); dbMix(y, dbEnv(dbBq(dbBq(dbNoise(N(0.3), R), 'bp', 4200, 1.2, sr), 'hp', 1800, 0.7, sr), sr, 0.0005, 0.07 * J(0.08)), 0.9); }
+    else if (v === 'cp') { y = new Float32Array(N(0.25)); for (let b = 0; b < 2; b++) dbMix(y, dbEnv(dbBq(dbNoise(y.length, R), 'bp', 2000, 1.6, sr), sr, 0.0004, 0.006, b * 0.012 * J(0.1)), 1); dbMix(y, dbEnv(dbBq(dbNoise(y.length, R), 'bp', 1800, 1.2, sr), sr, 0.002, 0.05, 0.024), 0.5); }
+    else if (v === 'rim') y = dbPartials(N(0.1), sr, [[1850 * J(0.01), 1, 0.012]], R);
+    else if (v === 'tom' || v === 'conga' || v === 'bongo') { const f0 = BANK_F0[v]; y = dbPartials(N(v === 'tom' ? 0.5 : 0.3), sr, [[f0, 1, v === 'tom' ? 0.12 : 0.06, 0.18, 0.012]], R); dbFade(y, sr, 0.05); }
+    else if (v === 'cowbell') { y = dbMetalSq(N(0.3), sr, [800, 1170], R); dbBq(y, 'bp', 1600, 1.4, sr); dbEnv(y, sr, 0.0005, 0.06); }
+    dbBq(y, 'lp', 11000, 0.7, sr); dbSat(y, 1.3); }
+  else if (fam === 'minimal') { // dry and clipped: every voice shortened, the low end of the snares thinned, nothing rings
+    const sh = v === 'ho' ? 0.18 : v === 'ride' || v === 'crash' ? 0.35 : v === 'tom' ? 0.16 : v === 'cp' || v === 'sn' ? 0.09 : 0.05; dbEnv(y, sr, 0.0001, sh * J(0.08)); if (v === 'sn' || v === 'cp') dbBq(y, 'hp', 900, 0.7, sr);
+    if (v === 'cp') { const k = dbEnv(dbBq(dbNoise(n0, R), 'hp', 3000, 0.7, sr), sr, 0.0002, 0.003); dbMix(y, k, 0.25); } y = y.subarray(0, Math.min(n0, N(sh * 6 + 0.05))).slice(); dbFade(y, sr, 0.01); }
+  else if (fam === 'industrial') { // metal and distortion: plates under the snare, folded hats, an anvil for a cowbell, all in a big hard room
+    if (v === 'sn' || v === 'cp') { dbMix(y, dbEnv(dbMetalModes(n0, sr, 24, 400, 6000, 0.25, R, 0.1), sr, 0.0005, 0.15), 0.5); dbSat(y, 3); dbMix(y, dbRoom(y, sr, 0.95, 0.2), 0.35); }
+    else if (v === 'hc' || v === 'ho' || v === 'hp' || v === 'ride' || v === 'crash') { dbNorm(y, 1); for (let i = 0; i < n0; i++) y[i] = Math.sin(y[i] * 3.2); dbBq(y, 'hp', 3000, 0.7, sr); }
+    else if (v === 'cowbell' || v === 'clave') { y = dbEnv(dbMetalModes(N(0.5), sr, 18, 700, 5200, 0.35, R, 0), sr, 0.0002, v === 'clave' ? 0.04 : 0.18); dbSat(y, 2); }
+    else if (v === 'tom' || v === 'conga' || v === 'bongo') { dbMix(y, dbEnv(dbMetalModes(n0, sr, 10, BANK_F0[v] * 2, BANK_F0[v] * 14, 0.2, R, 0.2), sr, 0.0003, 0.12), 0.4); dbSat(y, 2.5); }
+    dbBits(y, 9); dbBq(y, 'lp', 12000, 0.7, sr); }
+  else if (fam === 'vintage') { // a break from an old record: a bigger room, the kit pushed into tape, a narrower band
+    if (v !== 'shk' && v !== 'tamb') dbMix(y, dbRoom(y, sr, 0.85, 0.45), v === 'sn' || v === 'cp' || v === 'tom' ? 0.35 : 0.2); dbBq(y, 'hp', 70, 0.7, sr); dbBq(y, 'lp', 9500, 0.7, sr); dbNorm(y, 1); dbSat(y, 2.2);
+    const h = rng(311 + variant * 7); for (let i = 0; i < y.length; i++) if (h() < 0.00025) y[i] += (h() - 0.5) * 0.06; } // a little crackle
+  else if (fam === 'trap') { // 808-style, but tight, very bright hats for rolls, a snapping clap, a crisp snare
+    if (v === 'hc' || v === 'hp') { dbBq(y, 'hp', 8500, 0.7, sr); dbEnv(y, sr, 0.0002, (v === 'hp' ? 0.009 : 0.011) * J(0.08)); }
+    else if (v === 'ho') { dbBq(y, 'hp', 7500, 0.7, sr); }
+    else if (v === 'cp') { y = new Float32Array(N(0.4)); const nz = dbBq(dbBq(dbNoise(y.length, R), 'bp', 1800, 1.3, sr), 'hp', 900, 0.7, sr); for (let i = 0; i < y.length; i++) { const t = T(i); let e = 0; for (let b = 0; b < 3; b++) { const tb = t - b * 0.006; if (tb >= 0) e += Math.exp(-tb / 0.0022); } e += 0.6 * Math.exp(-Math.max(0, t - 0.018) / 0.06) * (t > 0.018 ? 1 : 0); y[i] = nz[i] * e; } }
+    else if (v === 'sn') { dbBq(y, 'hp', 220, 0.7, sr); dbMix(y, dbEnv(dbBq(dbNoise(n0, R), 'hp', 3500, 0.7, sr), sr, 0.0003, 0.09), 0.8); }
+    dbSat(y, 1.2); }
+  else if (fam === 'garage') { // crisp and short: skippy hats with a little shaker in them, a high snappy snare, a woody rim
+    if (v === 'hc' || v === 'hp') { dbEnv(y, sr, 0.0002, 0.012 * J(0.1)); dbMix(y, dbEnv(dbBq(dbNoise(n0, R), 'bp', 7500, 0.9, sr), sr, 0.002, 0.012), 0.35); }
+    else if (v === 'sn') { y = dbPartials(N(0.35), sr, [[255 * J(0.01), 1, 0.04, 0.08, 0.004], [480 * J(0.01), 0.5, 0.025]], R); dbMix(y, dbEnv(dbBq(dbBq(dbNoise(N(0.35), R), 'hp', 2400, 0.7, sr), 'lp', 12000, 0.7, sr), sr, 0.0005, 0.1 * J(0.06)), 1.3); }
+    else if (v === 'rim') { y = dbPartials(N(0.15), sr, [[1600 * J(0.01), 1, 0.025], [2500 * J(0.01), 0.5, 0.012], [800, 0.4, 0.02]], R); dbMix(y, dbEnv(dbNoise(y.length, R), sr, 0.0001, 0.0006), 0.4); dbBq(y, 'hp', 400, 0.7, sr); }
+    dbBq(y, 'lp', 14500, 0.7, sr); dbSat(y, 1.15); }
   // ---- the family's converter and colour ----
   // (each converter is followed by its machine's output filter: the stair steps of a sample-and-hold are images above the band, not tone)
   if (fam === '707') { dbBq(y, 'lp', 13000, 0.7, sr); dbNorm(y, 0.9); dbMulaw(y); dbBq(y, 'lp', 12500, 0.7, sr); }
   else if (fam === 'linn') { dbBq(y, 'lp', 14000, 0.7, sr); dbNorm(y, 0.9); dbHold(y, sr, 28000); dbMulaw(y); dbBq(y, 'lp', 13500, 0.7, sr); } /* (one gentle output filter: the 28 kHz machine was bright; two at 11 kHz left synthwave 8 dB short at 8 kHz) */
   else if (fam === 'lofi') { dbBq(y, 'lp', 7800, 0.7, sr); dbNorm(y, 1); dbSat(y, 1.8); dbHold(y, sr, 22050); dbBits(y, 10); dbBq(y, 'lp', 6500, 0.7, sr); dbBq(y, 'lp', 6500, 0.7, sr); const h = rng(77 + variant); for (let i = 0; i < y.length; i++) y[i] += (h() * 2 - 1) * 0.002; }
-  else if (analog) dbSat(y, 1.15);
+  else if (fam === '808') dbSat(y, 1.15);
   return dbLevel(y, sr); }
 // every one-shot leaves the generator at the same loudness (RMS over its first 150 ms = -14 dBFS): families differ in colour, not
 // in level, and BANK_GAIN alone matches a voice to the synthesized voice it replaces

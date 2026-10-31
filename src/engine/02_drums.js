@@ -142,11 +142,13 @@ class Hats {
 }
 // percussion: toms, congas/bongos, cowbell, clave/woodblock, tambourine, timbale — pitched bodies + noise
 class PercVoice { constructor() { this.on = 0; this.t = 0; this.wait = 0; this.vel = 1; this.ph = 0; this.ph2 = 0; this.f = 200; this.dec = 0.2; this.kind = 0; this.bp = new Svf(); this.gl = 1; this.gr = 1; this.e = 1; this.k = 0; this.ep = 1; this.e3 = 1; this.e4 = 1; this.ph3 = 0; shape(this); } }
-const PERC_F = [110, 220, 330, 560, 2500, 1100, 0, 420, 3000, 700, 0, 1450, 190, 85, 0, 120], PERC_DEC = [0.32, 0.22, 0.12, 0.09, 0.025, 0.05, 0.12, 0.18, 0.012, 0.22, 0.2, 0.9, 0.3, 0.55, 0.07, 0.22]; // no allocation per hit
-// the kind index travels in 4 bits of a percussion event (08_deck.js maps it back to a name): 16 kinds at most
-const PERC_KINDS = { tom: 0, conga: 1, bongo: 2, cowbell: 3, clave: 4, wood: 5, tamb: 6, timbale: 7, tick: 8, agogo: 9, guiro: 10, triangle: 11, djembe: 12, taiko: 13, maraca: 14, cajon: 15 };
+const PERC_F = [110, 220, 330, 560, 2500, 1100, 0, 420, 3000, 700, 0, 1450, 190, 85, 0, 120, 70, 330, 160, 95, 2200, 820, 480, 2100, 170, 620, 0, 260, 1050, 0, 0, 105],
+  PERC_DEC = [0.32, 0.22, 0.12, 0.09, 0.025, 0.05, 0.12, 0.18, 0.012, 0.22, 0.2, 0.9, 0.3, 0.55, 0.07, 0.22, 0.55, 0.38, 0.3, 0.22, 0.035, 0.06, 0.28, 0.6, 1.6, 0.28, 0.006, 0.12, 0.045, 0.16, 0.08, 0.22]; // no allocation per hit
+// the kind index travels in 5 bits of a percussion event (08_deck.js maps it back to a name): 32 kinds at most (v9.4: 16 → 32)
+const PERC_KINDS = { tom: 0, conga: 1, bongo: 2, cowbell: 3, clave: 4, wood: 5, tamb: 6, timbale: 7, tick: 8, agogo: 9, guiro: 10, triangle: 11, djembe: 12, taiko: 13, maraca: 14, cajon: 15,
+  surdo: 16, tabla: 17, udu: 18, frame: 19, snap: 20, temple: 21, cuica: 22, bell: 23, gong: 24, metal: 25, click: 26, zap: 27, blip: 28, sweep: 29, cabasa: 30, logdrum: 31 };
 // level trim per kind on the same velocity (measured: tools/perc_test.cjs). 1 = the level the original nine voices already had
-const PERC_TRIM = [1, 1, 1, 1, 1, 1, 1, 1, 1, 0.85, 1.4, 0.57, 0.72, 0.55, 1.7, 0.8];
+const PERC_TRIM = [1, 1, 1, 1, 1, 1, 1, 1, 1, 0.85, 1.4, 0.57, 0.72, 0.55, 1.7, 0.8, /* v9.4, set against the older kinds by RMS over 150 ms and peak */ 0.9, 0.7, 0.85, 0.8, 0.6, 1.1, 0.9, 0.7, 0.8, 0.8, 1.3, 0.75, 1, 0.3, 1.1, 0.85];
 class Perc {
   constructor(sr) { this.sr = sr; this.v = Array.from({ length: 6 }, () => new PercVoice()); this.i = 0; this.p = { gain: 1, pitch: 1, dec: 1, noise: 1 }; shape(this); }
   setKit(k) { Object.assign(this.p, k); }
@@ -155,9 +157,9 @@ class Perc {
     const pn = clamp(pan || 0, -1, 1); v.gl = Math.cos((pn + 1) * Math.PI / 4) * 1.414; v.gr = Math.sin((pn + 1) * Math.PI / 4) * 1.414;
     const base = note ? mtof(note) : PERC_F[v.kind]; v.f = base * this.p.pitch;
     v.dec = PERC_DEC[v.kind] * (this.p.dec ?? 1); v.vel = vel * PERC_TRIM[v.kind]; v.e = 1; v.k = Math.exp(-1 / (v.dec * sr)); v.ep = 1; v.e3 = 1; v.e4 = 1; v.ph3 = 0;
-    if (v.kind === 6) v.bp.set(9000, 0.8, sr); else if (v.kind === 3) v.bp.set(2600, 2.5, sr); else if (v.kind === 10) v.bp.set(3400, 1.4, sr); else if (v.kind === 14) v.bp.set(7000, 0.9, sr); else if (v.kind === 12) v.bp.set(2600, 1, sr); else if (v.kind === 15) v.bp.set(3200, 0.8, sr); else v.bp.set(v.f * 2.2, 1.2, sr); }
+    if (v.kind === 6) v.bp.set(9000, 0.8, sr); else if (v.kind === 3) v.bp.set(2600, 2.5, sr); else if (v.kind === 10) v.bp.set(3400, 1.4, sr); else if (v.kind === 14) v.bp.set(7000, 0.9, sr); else if (v.kind === 12) v.bp.set(2600, 1, sr); else if (v.kind === 15) v.bp.set(3200, 0.8, sr); else if (v.kind === 19) v.bp.set(1500, 1, sr); else if (v.kind === 20) v.bp.set(2300, 2.2, sr); else if (v.kind === 22) v.bp.set(1100, 2, sr); else if (v.kind === 26) v.bp.set(5200, 1.2, sr); else if (v.kind === 29) v.bp.set(7000, 3, sr); else if (v.kind === 30) v.bp.set(7500, 1, sr); else v.bp.set(v.f * 2.2, 1.2, sr); }
   render(L, R, n) {
-    const inv = 1 / this.sr, P = this.p, sr = this.sr, kP = Math.exp(-1 / (0.012 * sr)), k3 = Math.exp(-1 / (0.03 * sr)), k4 = Math.exp(-1 / (0.004 * sr)), NZ = P.noise ?? 1;
+    const inv = 1 / this.sr, P = this.p, sr = this.sr, kP = Math.exp(-1 / (0.012 * sr)), k3 = Math.exp(-1 / (0.03 * sr)), k4 = Math.exp(-1 / (0.004 * sr)), kZ = Math.exp(-1 / (0.018 * sr)), NZ = P.noise ?? 1;
     for (const v of this.v) { if (!v.on) continue;
       for (let i = 0; i < n; i++) { if (v.wait > 0) { v.wait--; continue; }
         v.t++; let y = 0; const e = v.e; v.e *= v.k;
@@ -170,6 +172,22 @@ class Perc {
           case 11: { v.ph += v.f * inv; if (v.ph >= 1) v.ph -= 1; v.ph2 += v.f * 2.76 * inv; if (v.ph2 >= 1) v.ph2 -= 1; y = (sin1(v.ph) * 0.8 + sin1(v.ph2) * 0.2 * v.e3) * e; v.e3 *= k3; break; } // triangle: a long ring, the upper partial dies first
           case 12: { const pd = 1 + 0.6 * v.ep; v.ep *= kP; v.ph += v.f * pd * inv; if (v.ph >= 1) v.ph -= 1; v.bp.run(noise()); y = sin1(v.ph) * e + v.bp.bp * v.e4 * 0.9 * NZ; v.e4 *= k4; break; } // djembe: a falling body and a slap
           case 14: { v.bp.run(noise()); y = v.bp.bp * e * 1.5 * NZ; break; } // maraca: a short band of noise
+          // (v9.4) sixteen more
+          case 17: { const pd = 1 + 0.04 * (1 - v.ep); v.ep *= kP; v.ph += v.f * pd * inv; if (v.ph >= 1) v.ph -= 1; v.ph2 += v.f * 2 * pd * inv; if (v.ph2 >= 1) v.ph2 -= 1; v.ph3 += v.f * 3 * pd * inv; if (v.ph3 >= 1) v.ph3 -= 1; v.bp.run(noise()); y = (sin1(v.ph) + 0.5 * sin1(v.ph2) * v.e3 + 0.3 * sin1(v.ph3) * v.e3) * e + v.bp.bp * v.e4 * 0.5 * NZ; v.e3 *= k3; v.e4 *= k4; break; } // tabla: a harmonic, slightly rising ring and a slap
+          case 18: { const pd = 0.75 + 0.45 * (1 - v.ep); v.ep *= k3; v.ph += v.f * pd * inv; if (v.ph >= 1) v.ph -= 1; v.ph2 += v.f * 1.5 * pd * inv; if (v.ph2 >= 1) v.ph2 -= 1; y = (sin1(v.ph) + 0.2 * sin1(v.ph2)) * e; break; } // udu: the bubble — the pitch rises as the air moves
+          case 19: { const pd = 1 + 0.3 * v.ep; v.ep *= kP; v.ph += v.f * pd * inv; if (v.ph >= 1) v.ph -= 1; v.bp.run(noise()); y = sin1(v.ph) * e + v.bp.bp * v.e4 * 1.2 * NZ; v.e4 *= k3; break; } // frame drum: a low thud and a long slap
+          case 20: { v.bp.run(noise()); y = v.bp.bp * e * 2.2 * NZ + (v.t < 5 ? 0.7 * (1 - v.t / 5) : 0); break; } // finger snap: a narrow band of noise and a click
+          case 21: { v.ph += v.f * inv; if (v.ph >= 1) v.ph -= 1; v.ph2 += v.f * 2.43 * inv; if (v.ph2 >= 1) v.ph2 -= 1; y = (sin1(v.ph) * 0.8 + sin1(v.ph2) * 0.35 * v.e4) * e; v.e4 *= k3; break; } // temple block: two hollow wood tones
+          case 22: { const env = 1 - v.ep; v.ep *= k3; const pd = 0.6 + 0.9 * env * (1.2 - env); v.ph += v.f * pd * inv; if (v.ph >= 1) v.ph -= 1; const x = v.ph < 0.5 ? 4 * v.ph - 1 : 3 - 4 * v.ph; v.bp.run(x); y = (v.bp.bp * 1.6 + x * 0.2) * e; break; } // cuica: a friction squeak that rises and falls
+          case 23: { v.ph += v.f * inv; if (v.ph >= 1) v.ph -= 1; v.ph2 += v.f * 2.76 * inv; if (v.ph2 >= 1) v.ph2 -= 1; v.ph3 += v.f * 5.4 * inv; if (v.ph3 >= 1) v.ph3 -= 1; y = (sin1(v.ph) * 0.7 + sin1(v.ph2) * 0.4 + sin1(v.ph3) * 0.2 * v.e3) * e; v.e3 *= k3; break; } // bell: a small hand bell
+          case 24: { v.ph += v.f * inv; if (v.ph >= 1) v.ph -= 1; v.ph2 += v.f * 1.483 * inv; if (v.ph2 >= 1) v.ph2 -= 1; v.ph3 += v.f * 2.09 * inv; if (v.ph3 >= 1) v.ph3 -= 1; y = (sin1(v.ph) * 0.6 + sin1(v.ph2) * 0.5 * (0.6 + 0.4 * v.e3) + sin1(v.ph3) * 0.35 * v.e3) * e * (0.85 + 0.15 * sin1((v.t * inv * 3.1) % 1)); v.e3 *= kP; break; } // gong: beating inharmonic modes
+          case 25: { v.ph += v.f * inv; if (v.ph >= 1) v.ph -= 1; v.ph2 += v.f * 2.71 * inv; if (v.ph2 >= 1) v.ph2 -= 1; v.ph3 += v.f * 5.43 * inv; if (v.ph3 >= 1) v.ph3 -= 1; y = (sin1(v.ph) * 0.5 + sin1(v.ph2) * 0.45 + sin1(v.ph3) * 0.35 * v.e3) * e + noise() * v.e4 * 0.5 * NZ; v.e3 *= k3; v.e4 *= k4; break; } // metal: a struck pipe
+          case 26: { v.bp.run(noise()); y = v.bp.bp * e * 2.5; break; } // click: a digital tick
+          case 27: { const pd = 1 + 7 * v.ep; v.ep *= kZ; v.ph += v.f * pd * inv; if (v.ph >= 1) v.ph -= 1; y = sin1(v.ph) * e; break; } // zap: a laser pitch dive
+          case 28: { const pd = 1 + 0.12 * v.ep; v.ep *= k4; v.ph += v.f * pd * inv; if (v.ph >= 1) v.ph -= 1; y = sin1(v.ph) * e; break; } // blip: a pure, short sine
+          case 29: { if ((v.t & 15) === 1) v.bp.set(900 + 7000 * e * e, 3, sr); v.bp.run(noise()); y = v.bp.bp * e * 2 * NZ; break; } // sweep: noise through a band falling with the hit
+          case 30: { v.ph3 += 61 * inv; if (v.ph3 >= 1) v.ph3 -= 1; v.bp.run(noise()); y = v.bp.bp * e * (v.ph3 < 0.5 ? 1.5 : 0.4) * NZ; break; } // cabasa: metal beads, a fast ratchet
+          case 31: { const pd = 1 + 0.6 * v.ep; v.ep *= kP; v.ph += v.f * pd * inv; if (v.ph >= 1) v.ph -= 1; v.ph2 += v.f * 2.02 * pd * inv; if (v.ph2 >= 1) v.ph2 -= 1; y = (sin1(v.ph) + 0.35 * sin1(v.ph2) * v.e3) * e; v.e3 *= k3; break; } // log drum: a falling wooden note
           default: { const pd = 1 + (v.kind === 0 ? 0.5 : 0.25) * v.ep; v.ep *= kP; v.ph += v.f * pd * inv; if (v.ph >= 1) v.ph -= 1; v.ph2 += v.f * 1.52 * pd * inv; if (v.ph2 >= 1) v.ph2 -= 1;
             y = (sin1(v.ph) + 0.25 * sin1(v.ph2) * v.e3) * e; v.e3 *= k3; if (v.kind === 1 || v.kind === 2 || v.kind === 15) { v.bp.run(noise()); y += v.bp.bp * v.e4 * 0.8 * NZ; v.e4 *= k4; } }
         }

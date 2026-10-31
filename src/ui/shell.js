@@ -31,7 +31,7 @@ function buildShell() { const app = $('.app'), con = $('.console'); if (!app || 
   // PLAY: the decks and the transport row
   for (const d of $$('.deck', con)) into('play').appendChild(d);
   const tr = document.createElement('div'); tr.className = 'transport'; tr.setAttribute('role', 'group'); tr.setAttribute('aria-label', 'Transport');
-  tr.innerHTML = `<label class="tp-kind"><span class="lbl">Next mix</span></label><button class="tp" data-tp="play0">▶ A</button><button class="tp mix" data-tp="mix"><span>Mix →</span><small class="tp-style">Auto</small></button><button class="tp" data-tp="play1">▶ B</button>`; into('play').appendChild(tr);
+  tr.innerHTML = `<label class="tp-kind"><span class="lbl">Next mix</span></label><button class="tp" data-tp="play0">▶ A</button><button class="tp mix" data-tp="mix"><span>Mix →</span><small class="tp-style">Auto</small></button><button class="tp" data-tp="play1">▶ B</button><div class="tp-ext" role="group" aria-label="Keep the playing track going"><button class="tp" data-ext="extend">+ Extend</button><button class="tp" data-ext="ride">Ride</button><button class="tp" data-ext="endless" aria-pressed="false">∞ Endless</button></div>`; into('play').appendChild(tr); wireExtend($('.tp-ext', tr));
   { const k = $('#txKind'), lb = $('label[for="txKind"]'); if (k) { $('.tp-kind', tr).appendChild(k); k.setAttribute('aria-label', 'Transition for the next mix'); } if (lb) lb.remove(); } // the transition is chosen where the mix is started
   $('[data-tp=play0]', tr).onclick = () => playPause(0); $('[data-tp=play1]', tr).onclick = () => playPause(1);
   $('[data-tp=mix]', tr).onclick = async () => { await startAudio(); const b = lead ^ 1, D = decks[b]; if (tx) { toast('A mix is already running — Cancel it on MIX'); return; } if (!D.score) { toast(`Deck ${'AB'[b]} is empty — pick a genre for it first`); return; } if (!decks[lead].playing) { playPause(b); return; } mixInto(b); };
@@ -99,7 +99,7 @@ function shellFrame(now) { if (now - shellT < 250) return; shellT = now; const s
   setText($('.st-bpm', st), D && D.bpm ? `${D.bpm.toFixed(1)} BPM` : '—'); setText($('.st-lufs', st), meter && meter.lufsS > -70 ? `${meter.lufsS.toFixed(1)} LUFS` : '—');
   setText($('.st-mix', st), tx ? `${tx.style || 'Mix'} · ${tx.u < 0 ? 'armed' : Math.round(Math.max(0, tx.u) * 100) + ' %'}` : auto.on ? 'Auto-DJ' : '');
   const ts = $('.tp-style'); if (ts) setText(ts, tx ? `${tx.style || ''} · ${tx.u < 0 ? 'armed' : Math.round(Math.max(0, tx.u) * 100) + ' %'}` : `${'AB'[lead ^ 1]} into ${'AB'[lead]}`);
-  for (let i = 0; i < 2; i++) { const b = $(`[data-tp=play${i}]`); if (b) { setText(b, (decks[i].playing ? '❚❚ ' : '▶ ') + 'AB'[i]); b.classList.toggle('on', !!decks[i].playing); } } }
+  for (let i = 0; i < 2; i++) { const b = $(`[data-tp=play${i}]`); if (b) { setText(b, (decks[i].playing ? '❚❚ ' : '▶ ') + 'AB'[i]); b.classList.toggle('on', !!decks[i].playing); } } renderExtend(); }
 // ---- (v9.3) your own drum samples: one per voice, decoded at the engine's rate, level-matched to the kit (RMS over the first
 // 150 ms, as the generated one-shots), kept in this browser (IndexedDB) and sent to the engine at start ----
 const USER_VOICES = [['sn', 'Snare'], ['cp', 'Clap'], ['rim', 'Rim'], ['hc', 'Closed hat'], ['ho', 'Open hat'], ['hp', 'Pedal hat'], ['ride', 'Ride'], ['crash', 'Crash'], ['shk', 'Shaker'], ['tom', 'Tom'], ['conga', 'Conga'], ['bongo', 'Bongo'], ['cowbell', 'Cowbell'], ['clave', 'Clave'], ['tamb', 'Tambourine']];
