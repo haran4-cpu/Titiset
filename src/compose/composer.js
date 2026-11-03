@@ -53,7 +53,12 @@ function chooseMode(modes, chords, ext, r) {
 }
 // kit jitter: each track gets its own sound inside the genre's envelope (tuning, decays, tone ±%)
 const NO_JITTER = new Set(['model', 'kind', 'claps', 'voices', 'wave', 'vowel', 'lfoSync', 'oct', 'keytrack', 'ratio']);
-function jitterKit(k, r, amt) { const o = {}; for (const key in k) { const v = k[key]; o[key] = (typeof v === 'number' && !NO_JITTER.has(key)) ? v * (1 + (r() * 2 - 1) * amt) : v; } return o; }
+// (v9.4) the new engines' tuning and switch parameters — operator ratios, algorithm, oscillator waves and octave, interval, material,
+// filter and drive types, LFO shape — and the 9.3 wavetable's table, filter type and unison count are never jittered: ±6 % on a
+// carrier ratio put a whole part up to a semitone out of tune, and a jittered switch (algo 0.97 → 0) chose another sound. Measured
+// (part_audit): 15 of 33 tracks had a part off its written notes, six of them a semitone flat. They still draw, so nothing else moves.
+const JITTER_KEEP = new Set(['r1', 'r2', 'r3', 'r4', 'algo', 'osc1', 'osc2', 'oct2', 'det2', 'pdw', 'mat', 'flt', 'dtype', 'lfoShape', 'table', 'ftype', 'uni', 'type']);
+function jitterKit(k, r, amt) { const o = {}; for (const key in k) { const v = k[key]; if (typeof v === 'number' && !NO_JITTER.has(key)) { const d = r(); o[key] = JITTER_KEEP.has(key) ? v : v * (1 + (d * 2 - 1) * amt); } else o[key] = v; } return o; }
 // tune the kick: if a key root / fifth lies within ±8 % of the kit's natural pitch, snap the body to it
 function tuneKick(kick, key) { const f0 = kick.fEnd; let best = f0, bd = 0.08;
   for (const iv of [0, 7]) for (let m = 24; m < 48; m++) if (((m - key - iv) % 12 + 12) % 12 === 0) { const f = mtof(m), d = Math.abs(f / f0 - 1); if (d < bd) { bd = d; best = f; } }

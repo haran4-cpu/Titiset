@@ -15,7 +15,10 @@ const MODES = A.modeTable(); let fails = 0, warns = 0; const rows = [];
 const dBtp = (v) => (v == null ? 'n/a' : (v === -Infinity ? '-inf' : v.toFixed(2)));
 for (const g of G) for (const seed of SEEDS) {
   const score = DEFAULT_KIT ? X.composeTrack(g, seed) : appScore(g, seed), sec = X.peakSectionOf(score), from = sec.bar0, to = Math.min(score.meta.bars, from + Math.min(BARS, sec.bars));
-  const r = renderTrack(g, seed, { score, fromBar: from, toBar: to }), file = path.join(OUT, `${g}-${seed}.wav`); A.writeWavF32(file, r.L, r.R, r.sr);
+  // (v9.4) the pre-roll reaches back to the start of every note still sounding (or releasing, its last bar) when the section begins:
+  // a chord held 4 bars up to a late entry rendered as digital silence — the 2-bar pre-roll had skipped its onset; the app plays it
+  let pre = 32; for (let i = 0; i < score.ev.n; i++) { const t = score.ev.t[i]; if (score.ev.ch[i] < 9 && t < from * 16 && t + score.ev.d[i] > from * 16 - 16) pre = Math.max(pre, Math.min(256, Math.ceil(from * 16 - t) + 2)); }
+  const r = renderTrack(g, seed, { score, fromBar: from, toBar: to, pre }), file = path.join(OUT, `${g}-${seed}.wav`); A.writeWavF32(file, r.L, r.R, r.sr);
   // the engine's own BS.1770 meter on exactly the samples that were written (not the render's running meter, which also heard the 2-bar pre-roll)
   const lm = new X.Loudness(r.sr); for (let i = 0; i < r.L.length; i += 128) { const n = Math.min(128, r.L.length - i); lm.block(r.L.subarray(i, i + n), r.R.subarray(i, i + n), n); }
   const own = lm.integrated(), ff = A.ffmpegLoudness(file), m = score.meta, a = A.analyze(file, { bpm: m.bpm, scale: MODES[m.mode], key: m.key, expected: A.expectedChroma(score, from * 16, to * 16), png: PNG ? path.join(OUT, `${g}-${seed}.png`) : null });

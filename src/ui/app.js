@@ -431,9 +431,18 @@ function buildDeck(i) {
 // ---------------------------------------------------------------- drawing
 function fitCanvas(c) { let r = GEO.get(c); if (!r) { r = c.getBoundingClientRect(); if (GEO_RO) { GEO.set(c, { width: r.width, height: r.height }); GEO_RO.observe(c); } } const dpr = Math.min(2, window.devicePixelRatio || 1), w = Math.max(10, Math.round(r.width * dpr)), h = Math.round(r.height * dpr); if (c.width !== w || c.height !== h) { c.width = w; c.height = h; } return dpr; }
 const ENERGY = { drums0: 0.3, drums1: 0.5, intro: 0.35, groove: 0.75, groove2: 0.85, verse: 0.65, break: 0.45, break2: 0.4, build: 0.7, drop: 1, outro: 0.45, chillA: 0.6, chillB: 0.75, ambA: 0.35, ambB: 0.55 };
+// (v9.4) the map's still part — sections, ruler, chord lane — is drawn once per score and size into its own canvas; each frame copies it
+// and draws only what moves (measured: drawMap was the main thread's biggest cost in a live set, every bar's chord redrawn 30 times a
+// second for both decks, and Club tracks have twice the bars)
+const MAPC = [null, null];
 function drawMap(i) { const D = decks[i], c = $('.map', deckEl(i)), g = c.getContext('2d'), dpr = fitCanvas(c), W = c.width, H = c.height; g.clearRect(0, 0, W, H); if (!D.score) return;
   const s = D.score, bars = s.meta.bars, x = (bar) => bar / bars * W, laneH = 16 * dpr, top = 14 * dpr, bodyH = H - top - laneH - 4 * dpr;
-  g.font = `${10 * dpr}px Azeret Mono, monospace`; g.textBaseline = 'top';
+  const key = (document.documentElement.dataset.theme || '') + (document.fonts ? document.fonts.status : ''); let mc = MAPC[i];
+  if (!mc || mc.s !== s || mc.W !== W || mc.H !== H || mc.key !== key) { const oc = (mc && mc.c) || document.createElement('canvas'); oc.width = W; oc.height = H; drawMapStill(oc.getContext('2d'), s, W, H, dpr); MAPC[i] = mc = { c: oc, s, W, H, key }; }
+  g.drawImage(mc.c, 0, 0);
+  dynMap(g, D, i, x, top, bodyH, H, dpr); }
+function drawMapStill(g, s, W, H, dpr) { const bars = s.meta.bars, x = (bar) => bar / bars * W, laneH = 16 * dpr, top = 14 * dpr, bodyH = H - top - laneH - 4 * dpr;
+  g.clearRect(0, 0, W, H); g.font = `${10 * dpr}px Azeret Mono, monospace`; g.textBaseline = 'top';
   for (const S of s.sections) { const e = ENERGY[S.layer] ?? 0.6, h = bodyH * (0.25 + 0.75 * e), x0 = x(S.bar0), w = x(S.bar0 + S.bars) - x0;
     g.fillStyle = css(SECTION_COL[S.type] || '--s-intro'); g.fillRect(x0 + 1, top + bodyH - h, w - 2, h);
     if (w > g.measureText(S.type.toUpperCase()).width + 8 * dpr) { g.fillStyle = 'rgba(235,230,220,.85)'; g.fillText(S.type.toUpperCase(), x0 + 4 * dpr, top + bodyH - h + 3 * dpr); } }
@@ -443,7 +452,8 @@ function drawMap(i) { const D = decks[i], c = $('.map', deckEl(i)), g = c.getCon
   const ly = H - laneH; g.fillStyle = css('--panel2'); g.fillRect(0, ly, W, laneH); let last = '';
   for (let b = 0; b < bars; b++) { const ch = s.chords[b]; g.fillStyle = `hsla(${ch.root * 30},38%,${ch.q === 'min' ? 30 : 40}%,0.9)`; g.fillRect(x(b), ly, x(b + 1) - x(b) + 0.5, laneH); } g.fillStyle = css('--text');
   const ch = []; for (let b = 0; b < bars; b++) { const l = s.chords[b].label; if (l !== last) { last = l; ch.push([b, l]); } }
-  for (let k = 0; k < ch.length; k++) { const [b, l] = ch[k], nb = k + 1 < ch.length ? ch[k + 1][0] : bars; g.fillRect(x(b), ly, 1, laneH); if (x(nb) - x(b) > g.measureText(l).width + 6 * dpr) g.fillText(l, x(b) + 2 * dpr, ly + 3 * dpr); } // a label only where it fits its own span
+  for (let k = 0; k < ch.length; k++) { const [b, l] = ch[k], nb = k + 1 < ch.length ? ch[k + 1][0] : bars; g.fillRect(x(b), ly, 1, laneH); if (x(nb) - x(b) > g.measureText(l).width + 6 * dpr) g.fillText(l, x(b) + 2 * dpr, ly + 3 * dpr); } } // a label only where it fits its own span
+function dynMap(g, D, i, x, top, bodyH, H, dpr) {
   // played shade, loop, pending jump, transition window, playhead
   const p = livePos(D) / 16; g.fillStyle = 'rgba(14,17,21,.45)'; g.fillRect(0, top, x(p), bodyH);
   if (D.loop) { g.fillStyle = 'rgba(235,230,220,.12)'; g.fillRect(x(D.loopFrom / 16), top, x(D.loop), bodyH); }

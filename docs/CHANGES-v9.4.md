@@ -20,6 +20,8 @@
   - 273 of them are new. Every preset is tagged by character (bright, warm, glassy, acid, organic, …) and by the genre families it suits.
   - All of them render finite and DC-free, and every melodic preset plays in tune: `tools/pitch_test.cjs`, 732 sustained notes, worst error 4.75 cents, none outside ±5 cents. Getting there meant retuning the inharmonic designs: the FM bells moved to whole-number ratios; glass, bell and tube got quieter or harmonic upper modes; the ring and cross-mod voices sit an octave and a fifth apart instead of a fifth; small detunes now spread both oscillators around the note.
 - **Every bass keeps its low end.** Measured before release: the plucked, phase-distortion, hyper-saw and FM-4 basses had their fundamental 14–42 dB under the note, and the drops of afro house, reggaeton, moombahton and UK drill fell 8–11 dB under the modern-master curve at 63 Hz. The new engines now have a sine on the fundamental (inverted for an FM carrier whose index turns its fundamental over); seventeen basses use it; the upright pluck, the FM slap and the crushed bass left the styles they did not belong in (the 808 styles, reggaeton, moombahton). Over 116 drops of new tracks (29 genres × 4 seeds, `tools/lowend_scan.cjs`), the low octaves sit at −2.4 dB median against the modern-master curve (9.3: −1.6 dB), and 4 drops are more than 7 dB under it (9.3: 3; the FM slap in tech house, the FM reese in techno, −8.8 dB each). `tools/signature_test.cjs` now checks that every bass preset (64) keeps at least −12 dB of its note's power at its fundamental (weakest: −11.5 dB, the band-pass bass, by design), and the tonal balance of all 33 genres is inside ±7 dB again.
+- **Parts play the notes they were written in.** Found by the part audit before release: every track's kits get a small per-track variation (±6 %), and in 9.4 it also reached the new engines' operator ratios, algorithm, oscillator and filter switches — an FM carrier at 0.94 put a whole part a semitone flat, and an algorithm of 0.97 became another algorithm. These (and the 9.3 wavetable's table, filter type and unison count) are no longer varied. Six of the audit's 15 failing tracks were a semitone flat; none is now.
+- **Every melodic preset reads at its own pitch class.** 24 of 250 sounded, one note at a time, closer to another pitch class than their own (an FM bell chord a minor seventh off; folded, cross-modulated, resonant and band-passed voices a fifth or a third off — their 3rd or 5th harmonic over the note). Each got a sine on its fundamental (or a gentler fold or index); `tools/signature_test.cjs` checks all 250. Six 9.3 voices whose vowel, breath or scream is the sound (choir, vocal pad, breath pad, psy glass, psy scream ×2) are reported, not graded. The FM 808 dives a fifth on its attack instead of an octave (its short notes read 2 semitones sharp).
 - **Every track gets its own sounds.**
   - Each melodic part takes a sound from its genre's palette: lead, chords, pad and arp 80 % of the time, bass 60 %. 9.3 did this half the time, from palettes of 3–7 sounds.
   - A track leans towards one character (organic, analog, digital, airy, dark or bright).
@@ -50,7 +52,7 @@
 - **Builds are no longer all alike.** Each build combines:
   - a drum shape: the classic roll, a late roll over a running groove, a kick roll, a clap build, a tom run, half-time drums, or no drums;
   - an effect: noise riser, pitched rise, noise sweep, reverse cymbal, swirl, zap, or none;
-  - an ending: beat repeat, tape stop, echo throw, a half-beat gap, a full beat of air, or a straight cut.
+  - an ending: a beat repeat (1/8 → 1/32), a tape stop, an echo throw (over the last half bar or the last beat), a snare roll into the line, half a beat of silence, a full beat of air, or a straight cut.
 
   No track repeats a combination or uses the same shape or effect twice in a row, and the noise riser is under **at most every other build: 49 % of 1116 builds** measured (20 Club tracks of every genre, `tools/form_test.cjs`). Breakdowns are entered as many ways (downlifter, crash, sweep or a dry cut, after an echo freeze, a tape stop, a stutter or nothing). A breakdown that goes straight into its drop ends on a fill, a reverse cymbal, half a beat of air, or nothing.
 - **A second melodic voice (LEAD 2).** Where a genre has no arpeggio or hook of its own, a track may add one:
@@ -95,8 +97,12 @@
 - **FLAC** (last in the plan's cut order).
 - **Key changes inside a track** (part of long-form evolution).
 
+## Faster
+- **The deck map** (sections, ruler, chord lane) is drawn once per track and size and copied each frame; only the playhead, loop and played shade are drawn live. It was the main thread's biggest cost in a live set (Club tracks have twice the bars): 840 ms of main-thread time per 90 s of a stress set → 149 ms.
+
 ## Known limits
 - The new engines render in JavaScript, not WebAssembly. On a slow phone, ECO mode thins the additive (4 partials) and hyper-saw (3 saws) voices.
 - MP3 files have no gapless tag (see above). Extend swaps in on the next 4-bar line; the few bars left of the section that is playing may change slightly at that line (a fill or a variation leading into the new act).
 - Exports take longer because tracks are longer: a Club track is 6–8 minutes, and its stems are six passes over it (render speed per second of music is unchanged: 5.6× real time against 9.3's 5.8× in the same test). `tools/export_test.cjs` now waits in proportion to the track's length, at the ratio its fixed waits were set for in 9.2 (a 280 s track), instead of a fixed 12 minutes for the stems.
+- `tools/wav_audit.cjs` renders a section from far enough back to hear a chord held into it (it rendered 2 bars before, and an ambient chord held over 4 bars into a late entry came out as 433 ms of digital silence; the app plays the chord — measured in a continuous render).
 - A build may now run straight into its drop with no gap (the "cut" ending). `tools/timing_test.cjs` checks each build at its own gap length (none, half a beat or a beat) instead of assuming half a beat.

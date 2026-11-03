@@ -7,8 +7,8 @@ function renderTrack(gid, seed, o) {
   const cal = o.cal || CAL()[gid]; if (cal) M.setLoudness(cal.master); if (o.masterDb != null) M.setLoudness(o.masterDb);
   let trim = null; if (cal && o.autoTrim !== false) { trim = X.trackTrim(score, cal, sr); deck.mix.trim = Math.pow(10, trim.trimDb / 20); deck.mix.trimS = deck.mix.trim; } // per-track auto-gain, exactly as the app does
   const sps = sr * 60 / score.meta.bpm / 4; const fromStep = (o.fromBar || 0) * 16, toStep = (o.toBar != null ? o.toBar : score.meta.bars) * 16;
-  // pre-roll: start 2 bars early (so tails/reverb are realistic), discard
-  const pre = Math.min(fromStep, 32); deck.seek(fromStep - pre);
+  // pre-roll: start 2 bars early (so tails/reverb are realistic), discard — or o.pre steps (a chord held from further back)
+  const pre = Math.min(fromStep, o.pre != null ? o.pre : 32); deck.seek(fromStep - pre);
   const preN = Math.round(pre * sps), N = Math.round((toStep - fromStep) * sps);
   const L = new Float32Array(N), R = new Float32Array(N), bl = new Float32Array(128), br = new Float32Array(128);
   const stems = o.stems ? Array.from({ length: 11 }, () => new Float32Array(N * 2)) : null; const cap = o.stems ? Array.from({ length: 11 }, () => new Float32Array(256)) : null;
