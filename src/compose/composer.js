@@ -369,7 +369,7 @@ function skeletonize(v, r, four, fam, allowS) { const o = Object.assign({}, v), 
   const busy = (ln, i) => { const x = o[ln]; return !!x && x[i % x.length] != null && x[i % x.length] !== '.' && x[i % x.length] !== '-'; };
   if (o.ho && r() < 0.3) { const k = r(); o.ho = lanes16(o.ho, (j, c) => (c === '.' || c === '-' ? c : k < 0.5 ? (j % 8 === 6 ? c : '.') : (j === 14 ? c : '.'))); } // open hat on 2-and / 4-and only, or the bar end only
   if (o.hc && four && r() < 0.75) { const g = HAT_GRIDS[Math.floor(r() * HAT_GRIDS.length)]; o.hc = lanes16(o.hc, (j, c, i) => (busy('ho', i) ? '.' : g[j])); }
-  else if (o.hc && r() < 0.5) { const a = o.hc.split(''), n = a.length; for (let i = 1; i < n; i += 2) if (a[i] === '.' && !busy('ho', i) && r() < 0.3) a[i] = 'g'; o.hc = a.join(''); }
+  else if (o.hc && r() < 0.75) { const a = o.hc.split(''), n = a.length; for (let i = 1; i < n; i += 2) if (a[i] === '.' && !busy('ho', i) && r() < 0.3) a[i] = 'g'; o.hc = a.join(''); } /* (v9.4: three broken grooves in four get the drummer's ghost hats — half of them played the written hat line note for note) */
   if (o.sh && r() < 0.4) { if (r() < 0.4) delete o.sh; else o.sh = lanes16(o.sh, (j, c) => (j % 4 === 3 ? '.' : c)); } // (no shaker at all, or a thinner one)
   if (o.s) { const n = Math.floor(r() * 3); const a = o.s.split(''); for (let k = 0; k < n; k++) { const pos = [7, 10, 15, 3, 13, 6, 9][Math.floor(r() * 7)]; if (!four && allowS && !allowS.has(pos)) continue; for (let i = pos; i < a.length; i += 16) if (a[i] === '.') a[i] = 'g'; } o.s = a.join(''); } // (a broken beat keeps its snare grammar: ghosts only where the genre's own patterns put snares)
   if (!four && o.k && r() < 0.6) { const a = o.k.split(''), n = a.length, hits = []; for (let i = 0; i < n; i++) if (a[i] !== '.' && a[i] !== '-' && i % 16 !== 0) hits.push(i);
@@ -713,10 +713,15 @@ function composeTrack(gid, seed, o) {
             if (a0 > 0) { while (hits.length && hits[0] < a0) hits.shift(); if (a0 < silentFrom && hits[0] !== a0 && !kicks.has(a0)) hits.unshift(a0); }
             else if (a0 < 0 && !stabPushed) for (const m of vo) S.push(t0 + a0 + sw(16 + a0), CH.chords, m, 0.85 * (0.75 + 0.25 * cf), Math.max(0.6, -a0 - 0.2), 0, bright);
             const nextChord = b + 1 < sec.bars && chordIndexAt(P, sec, bar + 1) !== chordIndexAt(P, sec, bar);
-            const push = nextChord && silentFrom === 16 && !hits.some((x) => x >= 12) && !kicks.has(14) ? 14 : -1; stabPushed = push >= 0;
+            const push = nextChord && silentFrom === 16 && !hits.some((x) => x >= 12) && !kicks.has(14) ? 14 : -1;
             const thin = cf < 1 && sec.type !== 'break'; let k = 0;
+            // (v9.4) a rhythm that already plays in the bar's last beat (all three house rhythms do) never anticipated a change: its last
+            // hit, when it falls an 8th or a 16th before the bar, now carries the new chord when the bar line is drawn as pushed for this genre family (harmArt) — the house piano push
+            const hl = hits.length - 1, pushLast = push < 0 && nextChord && silentFrom === 16 && hl >= 0 && hits[hl] >= 14 && !(thin && hl % 2 === 1) && art(bar + 1) < 0 ? hl : -1; stabPushed = push >= 0 || pushLast >= 0;
+            const vNext = pushLast >= 0 ? voicing('chords', cNext, Ch.range[0], Ch.range[1], Ch.voices || 4) : null;
             for (let h = 0; h < hits.length; h++) { const st = hits[h]; if (thin && h % 2 === 1) continue; const gap = (h + 1 < hits.length ? hits[h + 1] : push >= 0 ? push : 16) - st;
               const v = (k === 0 ? (p4 === 0 ? 0.95 : 0.88) : k % 2 ? 0.76 : 0.82) * (0.96 + 0.08 * rh()) * (0.75 + 0.25 * cf), len = cap(st, Math.max(0.6, Math.min((Ch.len || 1) * 0.9, gap - 0.2))); k++;
+              if (h === pushLast) { for (const m of vNext) S.push(t0 + st + sw(st) + fC, CH.chords, m, 0.9 * (0.75 + 0.25 * cf), Math.max(len, Math.min(1.5, 16 - st + 1)), 0, bright); continue; }
               for (const m of vo) S.push(t0 + st + sw(st) + fC, CH.chords, m, v, len, 0, bright); }
             if (push >= 0) { const vn = voicing('chords', cNext, Ch.range[0], Ch.range[1], Ch.voices || 4); for (const m of vn) S.push(t0 + push + sw(push), CH.chords, m, 0.9 * (0.75 + 0.25 * cf), Math.max(1.5, (Ch.len || 1) * 0.9), 0, bright); } } }
         else if (Ch.role === 'gate') { const rhy = laneBar(gateRh[(b >> 2) & 1], b); const vo = voicing('chords', c, Ch.range[0], Ch.range[1], Ch.voices || 5);

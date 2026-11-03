@@ -19,6 +19,11 @@ function note(kit, n, secs) { const syn = new X.Synth(sr, 2, true); syn.bpm = 12
     const k0 = Object.assign({ model: m }, base, extra, { sub: 0 }), a = goertzel(note(k0, 33, 0.4), 55, 4096), b = goertzel(note(Object.assign({}, k0, { sub: 0.6 }), 33, 0.4), 55, 4096); if (b < a + 1) bad.push(`${m}${JSON.stringify(extra)} ${(b - a).toFixed(1)} dB`); }
   for (const n of ['fm-growl', 'fm-bass']) { const k = X.SOUND_BANK.bass[n].k, a = goertzel(note(Object.assign({}, k, { sub: 0 }), 33, 1), 55, 4096), b = goertzel(note(k, 33, 1), 55, 4096); if (b < a) bad.push(`${n} ${(b - a).toFixed(1)} dB`); }
   ok(!bad.length, `the sub reinforces the fundamental on every model and FM bass${bad.length ? ': ' + bad.join(', ') : ''}`); }
+// 1b · (v9.4) every bass preset carries its fundamental (the plucked, phase-distortion, hyper-saw and FM-4 basses had it 14–42 dB
+//      under the note's total — a club drop without low end, measured on afro house, reggaeton, moombahton, UK drill)
+{ const share = (x, f) => { let re = 0, im = 0, e = 0; for (let i = 0; i < x.length; i++) { const w = 2 * Math.PI * f * i / sr; re += x[i] * Math.cos(w); im += x[i] * Math.sin(w); e += x[i] * x[i]; } return 10 * Math.log10((2 * (re * re + im * im) / x.length) / (e + 1e-20) + 1e-12); };
+  const weak = []; let worst = [0, '']; for (const [n, p] of Object.entries(X.SOUND_BANK.bass)) { const d = (share(note(p.k, 33, 0.4), 55) + share(note(p.k, 40, 0.4), 82.41)) / 2; if (d < worst[0]) worst = [d, n]; if (d < -12) weak.push(`${n} ${d.toFixed(1)} dB`); }
+  ok(!weak.length, `every bass preset (${Object.keys(X.SOUND_BANK.bass).length}) carries its fundamental: at least −12 dB of the note's power at A1 and E2 (weakest ${worst[1]} ${worst[0].toFixed(1)} dB)${weak.length ? ' — not: ' + weak.join(', ') : ''}`); }
 // 2 · pulse DC
 { const x = note({ model: 'square', pw: 0.28, cut: 8000, aSus: 1, envAmt: 0 }, 60, 0.5); let m = 0; for (let i = 4096; i < x.length; i++) m += x[i]; m /= x.length - 4096; let r = 0; for (let i = 4096; i < x.length; i++) r += x[i] * x[i]; r = Math.sqrt(r / (x.length - 4096));
   ok(Math.abs(m) < 0.02 * r, `a 28 % pulse has no DC (mean ${(m / r * 100).toFixed(2)} % of its RMS)`); }

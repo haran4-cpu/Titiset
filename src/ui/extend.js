@@ -1,14 +1,16 @@
 // ---------------------------------------------------------------- (v9.4) EXTEND · RIDE · ENDLESS
 // The deck keeps playing the same track, longer — no transition, no second track. EXTEND puts one more act (a breakdown and a build
-// into a new drop, a lift out of the groove, a false drop…) in the track's own style right after the section that is playing; in the
-// outro, the outro is cut at its next 4-bar line and the new act and a fresh outro follow. RIDE carries the playing section on for
-// 16–32 more bars. ENDLESS presses Extend for you whenever the track reaches its last drop (until you switch it off or start a mix).
+// into a new drop, a lift out of the groove, a false drop…) in the track's own style right after the drop that is playing or coming
+// (after the section that is playing when no drop is ahead); in the outro, the outro is cut at its next 4-bar line and the new act
+// and a fresh outro follow. RIDE carries the playing section on for 16–32 more bars (in a build: the drop it leads to). ENDLESS presses Extend for you whenever the track reaches its last drop (until you switch it off or start a mix).
 // The continuation is composed from the track's own seed, sounds and ideas; nothing that has played changes; the new form swaps in on
 // the next 4-bar line (commitSpec). The form stays written in the score, so a saved set keeps the longer track.
 const EXT = { endless: [false, false], at: [-1, -1] };
 function extSection(D) { const S = D.score.sections, bar = Math.floor(schedPos(D) / 16); for (let k = 0; k < S.length; k++) if (bar < S[k].bar0 + S[k].bars) return { k, rel: bar - S[k].bar0 }; return { k: S.length - 1, rel: 0 }; }
 function extendDeck(i, how, quiet) { const D = decks[i]; if (!D.score || !D.spec) { if (!quiet) toast('Load a track into this deck first'); return false; } if (!Array.isArray(D.spec.form)) { if (!quiet) toast('This track has no written form to extend'); return false; }
-  const G = GENRE_BY_ID[D.gid]; if (!G) return false; const { k, rel } = extSection(D), form = D.spec.form.map((f) => Object.assign({}, f)), cur = D.score.sections[k];
+  const G = GENRE_BY_ID[D.gid]; if (!G) return false; const pos = extSection(D), rel = pos.rel, form = D.spec.form.map((f) => Object.assign({}, f)), S = D.score.sections;
+  // (before a drop — in the intro, a groove, a breakdown or a build — the new act follows the drop that is coming: a build is never cut off from its drop)
+  let k = pos.k; if ((how !== 'ride' && S[k].type !== 'drop' && S[k].type !== 'outro') || (how === 'ride' && S[k].type === 'build')) { const nd = S.findIndex((x, j) => j > k && x.type === 'drop'); if (nd > 0) k = nd; } const cur = S[k];
   const n = (D.spec.ext = (D.spec.ext || 0) + 1), r = rng(hashStr('extend/' + D.gid + '/' + (D.spec.seed >>> 0) + '/' + n));
   const act = extensionAct(G, r, how, cur).map(([t, b, l]) => { const f = { section: t, bars: b }; if (l && l !== SPEC_DEFAULT_LAYER[t]) f.layer = l; return f; });
   if (!act.length) return false; snap(D);

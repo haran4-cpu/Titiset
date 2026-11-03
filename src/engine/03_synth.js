@@ -23,7 +23,7 @@ const TONE_M = new Uint8Array(32); for (const k of ['sub', 'b808', 'organ', 'pia
 class Voice {
   constructor(sr) { this.sr = sr; this.on = 0; this.wait = 0; this.len = 0; this.stage = 0; this.env = 0; this.fenv = 0; this.fstage = 0; this.note = 60; this.f = 220; this.ft = 220; this.vel = 1; this.age = 0; this.acc = 0;
     this.ph = new Float64Array(9); this.lad = new Ladder(); this.s1 = new Svf(); this.s2 = new Svf(); this.s3 = new Svf(); this.s4 = new Svf(); this.lfo = 0; this.t = 0; this.gl = 1; this.gr = 1; this.ks = new Float32Array(2400); this.kw = 0; this.kl = 100; this.kz = 0;
-    this.mph = 0; this.mph2 = 0; this.p = null; this.m = 0; this.cut = 1000; this.pcount = 0; this.relFast = 0; this.ls = 0; this.bright = 1; this.fadeIn = -1; this.atk = 0.002; this.rel = 0.15; this.apx = 0; this.apy = 0; this.vg = 1; this.ag = 1; this.pa = new Float64Array(8); this.pd = new Float64Array(8); this.e1 = 0; this.e2 = 0; this.e3 = 0; this.d1 = 0; this.d2 = 0; this.d3 = 0; shape(this); }
+    this.mph = 0; this.mph2 = 0; this.sph = 0; this.p = null; this.m = 0; this.cut = 1000; this.pcount = 0; this.relFast = 0; this.ls = 0; this.bright = 1; this.fadeIn = -1; this.atk = 0.002; this.rel = 0.15; this.apx = 0; this.apy = 0; this.vg = 1; this.ag = 1; this.pa = new Float64Array(8); this.pd = new Float64Array(8); this.e1 = 0; this.e2 = 0; this.e3 = 0; this.d1 = 0; this.d2 = 0; this.d3 = 0; shape(this); }
 }
 class Synth {
   // mono: legato with glide (bass, mono leads); poly: n voices with stealing
@@ -56,7 +56,7 @@ class Synth {
     v.atk = P.aAtk; v.rel = P.aRel; if (opt && opt.fit) { const sec = dur / sr; v.atk = Math.min(P.aAtk, 0.25 * sec); v.rel = Math.min(P.aRel, Math.max(0.08, 0.35 * sec)); }
     if (this.m === MODEL.wt && P.ftype === 4) v.ks.fill(0, 0, 2400); // comb filter memory
     for (let k = 0; k < 9; k++) v.ph[k] = this.m === MODEL.supersaw || this.m === MODEL.pad || this.m === MODEL.strings || (this.m === MODEL.wt && P.uni > 1) ? noise() * 0.5 + 0.5 : (this.m === MODEL.organ || this.m === MODEL.piano || this.m === MODEL.ep || this.m === MODEL.bell || this.m <= 1 ? 0 : 0.5); // saws start at their zero crossing (no DC step)
-    v.lad.reset(); v.s1.reset(); v.s2.reset(); v.s3.reset(); v.mph = 0; v.mph2 = 0; v.lfo = 0;
+    v.lad.reset(); v.s1.reset(); v.s2.reset(); v.s3.reset(); v.mph = 0; v.mph2 = 0; v.sph = 0; v.lfo = 0;
     const pan = opt && opt.pan != null ? opt.pan : 0; v.gl = Math.cos((clamp(pan, -1, 1) + 1) * Math.PI / 4) * 1.414; v.gr = Math.sin((clamp(pan, -1, 1) + 1) * Math.PI / 4) * 1.414;
     if (this.m === MODEL.kspluck) { const per = clamp(sr / f, 9, 2390), Li = Math.floor(per - 0.6), dl = per - Li - 0.5; v.kl = Li; v.kz = (1 - dl) / (1 + dl); v.apx = 0; v.apy = 0; let z = 0; for (let i = 0; i <= Li + 1; i++) { z += (noise() - z) * (0.25 + 0.7 * P.bright); v.ks[i] = z; } v.kw = Li + 2; }
     if (this.m === MODEL.vox) { const F = VOWELS[(opt && opt.vowel) || P.vowel] || VOWELS.a; v.s1.set(F[0], 9, sr); v.s2.set(F[1], 11, sr); v.s3.set(F[2], 13, sr); v.vg = formantNorm(f, F); } else v.vg = 1;
@@ -203,7 +203,7 @@ class Synth {
 function copySvf(x, y) { y.ic1 = x.ic1; y.ic2 = x.ic2; y.g = x.g; y.k = x.k; y.a1 = x.a1; y.a2 = x.a2; y.a3 = x.a3; }
 function copyVoice(a, b) { // complete state copy (no allocation) — used for click-free hand-over
   b.on = a.on; b.stage = a.stage; b.env = a.env; b.fenv = a.fenv; b.fstage = a.fstage; b.f = a.f; b.ft = a.ft; b.note = a.note; b.vel = a.vel; b.acc = a.acc; b.t = a.t; b.p = a.p; b.m = a.m;
-  b.gl = a.gl; b.gr = a.gr; b.ls = a.ls; b.bright = a.bright; b.lfo = a.lfo; b.mph = a.mph; b.mph2 = a.mph2; b.cut = a.cut; b.len = a.len; b.wait = 0; b.relFast = a.relFast; b.age = 0; b.atk = a.atk; b.rel = a.rel; b.vg = a.vg;
+  b.gl = a.gl; b.gr = a.gr; b.ls = a.ls; b.bright = a.bright; b.lfo = a.lfo; b.mph = a.mph; b.mph2 = a.mph2; b.sph = a.sph; b.cut = a.cut; b.len = a.len; b.wait = 0; b.relFast = a.relFast; b.age = 0; b.atk = a.atk; b.rel = a.rel; b.vg = a.vg;
   for (let k = 0; k < 9; k++) b.ph[k] = a.ph[k];
   const L1 = a.lad, L2 = b.lad; L2.s1 = L1.s1; L2.s2 = L1.s2; L2.s3 = L1.s3; L2.s4 = L1.s4; L2.g = L1.g; L2.G = L1.G; L2.k = L1.k; L2.drive = L1.drive;
   copySvf(a.s1, b.s1); copySvf(a.s2, b.s2); copySvf(a.s3, b.s3); copySvf(a.s4, b.s4);

@@ -50,7 +50,7 @@ Synth.prototype.voiceX = function (v, L, R, n) {
   const fD = Math.exp(-1 / (Math.max(0.005, P.fDec) * sr)), fA = 1 - Math.exp(-1 / (Math.max(0.0005, P.fAtk) * sr)), gl = P.glide > 0 ? 1 - Math.exp(-1 / (P.glide * sr)) : 1;
   const lsync = P.mLfoS > 0 ? P.mLfoS : v.ls, lfoInc = lsync ? (this.bpm / 60) / lsync / sr : P.lfoRate / sr;
   const sus = P.aSus, fSus = P.fSus, pEnv = P.pEnv, lfoAmp = P.lfoAmp, ft = v.ft, outG = v.vel * P.gain, gL = v.gl, gR = v.gr;
-  let env = v.env, stage = v.stage, fenv = v.fenv, fstage = v.fstage, f = v.f, lfo = v.lfo, tt = v.t, len = v.len, relFast = v.relFast, fadeIn = v.fadeIn, ag = v.ag, alive = 1, i = 0;
+  let env = v.env, stage = v.stage, fenv = v.fenv, fstage = v.fstage, f = v.f, lfo = v.lfo, tt = v.t, len = v.len, relFast = v.relFast, fadeIn = v.fadeIn, ag = v.ag, alive = 1, i = 0, sph = v.sph, subA = P.sub ? P.sub * 0.5 : 0; /* (negative: the sine inverted, for an FM carrier whose fundamental the index has turned over — Bessel J0 < 0) */
   // the filter: an explicit type, else the engine's natural one (pluck2 / modal / grain / add: none; the rest: 12 dB low-pass)
   const flt = P.flt >= 0 ? P.flt | 0 : (m === MODEL.pluck2 || m === MODEL.modal || m === MODEL.add || m === MODEL.grain ? 0 : 2), dty = P.dtype | 0, drv = P.drv, wide = P.stereo;
   const vel = v.vel, idxS = (0.45 + 0.55 * vel) * (0.5 + P.bright), eco = ECO.level >= 2;
@@ -146,9 +146,9 @@ Synth.prototype.voiceX = function (v, L, R, n) {
       if (flt) { sideLp += (side - sideLp) * sideA; if (sideLp < 1e-20 && sideLp > -1e-20) sideLp = 0; side = sideLp; }
       // the drive
       if (dty === 4) { if (crushC-- <= 0) { crushC = (drv * 5) | 0; crushH = xDrive(4, y, drv, 0); } y = crushH; } else if (dty) y = xDrive(dty, y, drv, 0);
-      dcz += (y - dcz) * dcA; y -= dcz; const g = env * outG * am, o = y * g, sg = side * g; L[i] += (o - sg) * gL; R[i] += (o + sg) * gR;
+      dcz += (y - dcz) * dcA; y -= dcz; if (subA) { sph += dt; if (sph >= 1) sph -= 1; y += sin1(sph) * subA; } /* (v9.4) a sine on the fundamental, after the filter and the drive: a plucked or struck bass keeps its low end in a club mix */ const g = env * outG * am, o = y * g, sg = side * g; L[i] += (o - sg) * gL; R[i] += (o + sg) * gR;
     }
     if (!alive) break;
   }
-  v.env = env; v.stage = stage; v.fenv = fenv; v.fstage = fstage; v.f = f; v.lfo = lfo; v.t = tt; v.len = len; v.relFast = relFast; v.fadeIn = fadeIn; v.ag = ag; v.e1 = e1; v.e2 = e2; v.e3 = e3; v.d3 = sideLp; v.mph = dcz;
+  v.env = env; v.stage = stage; v.fenv = fenv; v.fstage = fstage; v.f = f; v.lfo = lfo; v.t = tt; v.len = len; v.relFast = relFast; v.fadeIn = fadeIn; v.ag = ag; v.e1 = e1; v.e2 = e2; v.e3 = e3; v.d3 = sideLp; v.mph = dcz; v.sph = sph;
   if (!alive) { v.on = 0; v.relFast = 0; v.fadeIn = -1; } };

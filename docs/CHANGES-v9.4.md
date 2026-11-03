@@ -19,6 +19,7 @@
   - **Drums:** 89 (kick 30, snare 23, hats 22, percussion 14).
   - 273 of them are new. Every preset is tagged by character (bright, warm, glassy, acid, organic, …) and by the genre families it suits.
   - All of them render finite and DC-free, and every melodic preset plays in tune: `tools/pitch_test.cjs`, 732 sustained notes, worst error 4.75 cents, none outside ±5 cents. Getting there meant retuning the inharmonic designs: the FM bells moved to whole-number ratios; glass, bell and tube got quieter or harmonic upper modes; the ring and cross-mod voices sit an octave and a fifth apart instead of a fifth; small detunes now spread both oscillators around the note.
+- **Every bass keeps its low end.** Measured before release: the plucked, phase-distortion, hyper-saw and FM-4 basses had their fundamental 14–42 dB under the note, and the drops of afro house, reggaeton, moombahton and UK drill fell 8–11 dB under the modern-master curve at 63 Hz. The new engines now have a sine on the fundamental (inverted for an FM carrier whose index turns its fundamental over); seventeen basses use it; the upright pluck, the FM slap and the crushed bass left the styles they did not belong in (the 808 styles, reggaeton, moombahton). Over 116 drops of new tracks (29 genres × 4 seeds, `tools/lowend_scan.cjs`), the low octaves sit at −2.4 dB median against the modern-master curve (9.3: −1.6 dB), and 4 drops are more than 7 dB under it (9.3: 3; the FM slap in tech house, the FM reese in techno, −8.8 dB each). `tools/signature_test.cjs` now checks that every bass preset (64) keeps at least −12 dB of its note's power at its fundamental (weakest: −11.5 dB, the band-pass bass, by design), and the tonal balance of all 33 genres is inside ±7 dB again.
 - **Every track gets its own sounds.**
   - Each melodic part takes a sound from its genre's palette: lead, chords, pad and arp 80 % of the time, bass 60 %. 9.3 did this half the time, from palettes of 3–7 sounds.
   - A track leans towards one character (organic, analog, digital, airy, dark or bright).
@@ -59,9 +60,12 @@
 
   Its sound comes from the palette on an engine the lead does not use. Its level is set in context, 6 dB under the line it accompanies (8 dB for an answer, 3 dB for a motif), and it follows when that line's level is refined. 84 of 198 tracks measured carry one.
 - **A top percussion loop:** one or two light voices on a euclidean rhythm in the drops (organic or machine, by family), in 117 of 198 tracks.
+- **Grooves:**
+  - **The house piano push.** A stab rhythm that already plays in the bar's last beat (all three house rhythms do) never anticipated a chord change in 9.3. Its last hit, when it falls an 8th or a 16th before the bar, now carries the new chord as often as the genre family pushes (`tools/rhythm_stats.cjs`: house 33.5 % of changes anticipated, deep house 52 %, tech house 64 %).
+  - **Broken grooves** (2-step, drum & bass, breaks…): three tracks in four get the drummer's ghost hats (9.3: half). Two tracks of UK garage share their first drop bar less often: 0.55 % of pairs over 200 tracks (9.3: 0.71 %).
 - **Extend · Ride · Endless** (PLAY, under the transport). The deck keeps playing the same track, longer, with no transition:
-  - **Extend** adds one more act after the section that is playing (in the outro: the outro is cut at its next 4-bar line, then a new act and a fresh outro).
-  - **Ride** carries the playing section on.
+  - **Extend** adds one more act after the drop that is playing or coming, so a build is never cut off from its drop (with no drop ahead: after the section that is playing; in the outro: the outro is cut at its next 4-bar line, then a new act and a fresh outro).
+  - **Ride** carries the playing section on (in a build: the drop it leads to).
   - **Endless** adds an act whenever the track reaches its last drop.
 
   The continuation comes from the track's own seed, sounds and ideas, and swaps in on the next 4-bar line. The form stays written in the score, so a saved set keeps the longer track.
@@ -94,4 +98,5 @@
 ## Known limits
 - The new engines render in JavaScript, not WebAssembly. On a slow phone, ECO mode thins the additive (4 partials) and hyper-saw (3 saws) voices.
 - MP3 files have no gapless tag (see above). Extend swaps in on the next 4-bar line; the few bars left of the section that is playing may change slightly at that line (a fill or a variation leading into the new act).
+- Exports take longer because tracks are longer: a Club track is 6–8 minutes, and its stems are six passes over it (render speed per second of music is unchanged: 5.6× real time against 9.3's 5.8× in the same test). `tools/export_test.cjs` now waits in proportion to the track's length, at the ratio its fixed waits were set for in 9.2 (a 280 s track), instead of a fixed 12 minutes for the stems.
 - A build may now run straight into its drop with no gap (the "cut" ending). `tools/timing_test.cjs` checks each build at its own gap length (none, half a beat or a beat) instead of assuming half a beat.
