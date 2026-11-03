@@ -435,7 +435,7 @@ const ENERGY = { drums0: 0.3, drums1: 0.5, intro: 0.35, groove: 0.75, groove2: 0
 // and draws only what moves (measured: drawMap was the main thread's biggest cost in a live set, every bar's chord redrawn 30 times a
 // second for both decks, and Club tracks have twice the bars)
 const MAPC = [null, null];
-function drawMap(i) { const D = decks[i], c = $('.map', deckEl(i)), g = c.getContext('2d'), dpr = fitCanvas(c), W = c.width, H = c.height; g.clearRect(0, 0, W, H); if (!D.score) return;
+function drawMap(i) { const D = decks[i], c = $('.map', deckEl(i)), g = c.getContext('2d'), dpr = fitCanvas(c), W = c.width, H = c.height; g.clearRect(0, 0, W, H); if (!D.score || !W || !H) return; /* (a hidden map has no size: a 0-pixel canvas cannot be copied) */
   const s = D.score, bars = s.meta.bars, x = (bar) => bar / bars * W, laneH = 16 * dpr, top = 14 * dpr, bodyH = H - top - laneH - 4 * dpr;
   const key = (document.documentElement.dataset.theme || '') + (document.fonts ? document.fonts.status : ''); let mc = MAPC[i];
   if (!mc || mc.s !== s || mc.W !== W || mc.H !== H || mc.key !== key) { const oc = (mc && mc.c) || document.createElement('canvas'); oc.width = W; oc.height = H; drawMapStill(oc.getContext('2d'), s, W, H, dpr); MAPC[i] = mc = { c: oc, s, W, H, key }; }
