@@ -36,7 +36,7 @@ class Engine {
       case 'loop': if (m.from >= 0) this.flushAt(m.deck | 0); D.loopFrom = m.from; D.loopTo = m.to; break; // (a held loop never reaches a step beyond it: what was planned for the line after it is settled now)
       case 'bpm': D.setBpm(m.bpm); D.glideRate = 0; if (this.tx && this.tx.started) { for (const X of this.decks) if (X.playing) { X.setBpm(m.bpm); X.glideRate = 0; } } if ((m.deck | 0) === this.lead || (this.tx && this.tx.started)) this.master.setTempo(m.bpm); break; // during a mix both decks follow (one tempo, no drift)
       case 'mute': D.mix.s[m.ch].mute = m.on ? 1 : 0; break;
-      case 'partGain': if (m.ch >= 0 && m.ch < NCH) D.mix.ug[m.ch | 0] = clamp(m.v, 0, 1.5); break; // (v9.3) a part's level (EDIT · Mix), on top of the calibrated balance
+      case 'partGain': if (m.ch >= 0 && m.ch < NCH) D.mix.ug[m.ch | 0] = clamp(m.v, 0, 2); break; // (v9.3) a part's level (EDIT · Mix), on top of the calibrated balance
       case 'eq': D.mix.low = clamp(m.low ?? D.mix.low, -40, 12); D.mix.mid = clamp(m.mid ?? D.mix.mid, -40, 12); D.mix.high = clamp(m.high ?? D.mix.high, -40, 12); break; // (v9.2 review) clamped: EQ high = 1e9 dB overflowed the filter, and every self-heal copied it back (333 heals in 1000 blocks)
       case 'filter': D.mix.filter = clamp(m.v, -1, 1); break;
       case 'carve': D.mix.carve = clamp(+m.v || 0, 0, 1); break; // (v10) how much the parts make room for each other (0 = off, the 9.5 mix)

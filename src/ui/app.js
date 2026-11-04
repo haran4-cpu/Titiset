@@ -392,7 +392,7 @@ function renderDeckHead(i) { const D = decks[i], el = deckEl(i); if (!el) return
 function setMood(i, mood) { const D = decks[i]; if (!D.spec) return; tasteMood(mood); const sp = D.spec; if (mood) sp.mood = mood; else delete sp.mood;
   if (sp.harmony) { delete sp.harmony.progression; delete sp.harmony.extension; delete sp.harmony.barsPerChord; delete sp.harmony.breakBarsPerChord; } delete sp.mode; for (const f of sp.form) delete f.progression;
   return commitSpec(i, { q: 4 }).then((s) => { if (s) toast(`${mood ? mood[0].toUpperCase() + mood.slice(1) : 'Genre'} harmony — ${s.meta.prog.join(' – ')} · from bar ${D.swapAt / 16 + 1}`); renderDockSoon(); return s; }); }
-function setBpmLive(i, bpm) { const D = decks[i]; if (!D.spec) return; D.spec.bpm = Math.max(60, Math.min(200, Math.round(bpm * 2) / 2)); commitSpec(i, { q: 1 }); renderDock(); }
+function setBpmLive(i, bpm) { const D = decks[i]; if (!D.spec) return; D.spec.bpm = Math.max(50, Math.min(220, Math.round(bpm * 10) / 10)); commitSpec(i, { q: 1 }); renderDock(); }
 // one part re-drawn (its own random stream), everything else identical — lands on the next 4-bar line
 function regenPart(i, part, q, extra) { const D = decks[i]; if (!D.spec) return; const n = (Math.random() * 2 ** 31) >>> 0; if (extra && extra.complexity != null) D.spec.complexity = Math.round(extra.complexity * 100) / 100;
   if (part === 'lead') D.spec.melodySeed = n; // melodies you wrote as text stay
@@ -418,7 +418,7 @@ function buildDeck(i) {
     <div class="row jumps"></div>
     <div class="row ctl"><span class="lbl">Mood</span><select class="btn cmood" aria-label="Mood"><option value="">Genre</option>${Object.keys(MOODS).map((m) => `<option value="${m}">${m[0].toUpperCase() + m.slice(1)}</option>`).join('')}</select>
       <span class="lbl" title="Thins hats, perc and arp fills and pulls the melodic parts back (low) or pushes them forward (high) — live, no recompose">Energy</span><input class="energy" type="range" min="0" max="1" step="0.01" value="0.5" aria-label="Energy">
-      <span class="lbl">BPM</span><input class="btn cb" id="cb${i}" type="number" min="60" max="200" step="0.5" aria-label="Tempo" style="width:72px"></div>
+      <span class="lbl">BPM</span><input class="btn cb" id="cb${i}" type="number" min="50" max="220" step="0.1" aria-label="Tempo" style="width:72px"></div>
     <div class="row parts"><span class="lbl">New</span>${[['drums', 'Drums'], ['bass', 'Bass'], ['chords', 'Chords'], ['lead', 'Melody']].map(([k, l]) => `<button class="btn" data-part="${k}" aria-label="New ${l.toLowerCase()}" title="Re-draw only the ${l.toLowerCase()} — same key, chords and form — from the next 4-bar line">${l}</button>`).join('')}
 </div>
     <canvas class="steps" height="104" aria-label="Current bar: every event of the score"></canvas>

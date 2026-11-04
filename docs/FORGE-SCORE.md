@@ -22,7 +22,7 @@ This is a complete deep-house track. Add fields only to say something the genre 
 | `variation` | int ≥ 0 | re-draws the drum, bass and hook choices while keeping the plan |
 | `melodySeed` | int ≥ 0 | re-draws only the generated melodies |
 | `seeds` | `{ drums, bass, chords }` ints | re-draws only that part (its variations, fills, rhythm choices); everything else stays identical |
-| `bpm` | 60–200 | tempo. Stay inside the genre's range unless you mean it |
+| `bpm` | 50–220 | tempo. Stay inside the genre's range unless you mean it |
 | `key` | `C C# Db D Eb E F F# Gb G Ab A Bb B` | tonic only. The mode goes in `mode` |
 | `mode` | `major minor dorian phrygian lydian mixolydian harmonic phrygdom` | `harmonic` = harmonic minor; `phrygdom` = phrygian dominant |
 | `swing` | 50–75 | MPC-style swing on odd 16ths. 50 is straight, 54 light, 56–58 house, 62–66 garage or lo-fi |
