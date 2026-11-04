@@ -6,7 +6,7 @@ const HOST = { lead: 'trance', chords: 'deep-house', pad: 'progressive-house', b
 const CH = { lead: 7, chords: 5, pad: 6, bass: 4, arp: 8, kick: 0, snare: 1, hats: 2, perc: 3 };
 if (!HOST.arp) HOST.arp = (X.GENRES.find((g) => g.arp || g.hook) || {}).id;
 let fails = 0; const out = [];
-function measure(gid, sound) { const spec = { forge: 1, genre: gid, seed: 4 }; if (sound) spec.sound = sound; const s = X.compileSpec(spec), sec = X.peakSectionOf(s);
+function measure(gid, sound) { X.noiseSeed(0x5eed); /* (v10.1) every render starts from the same noise: a preset's level no longer depends on how many presets ran before it (chords/fm-epiano measured +2.5 LU alone and +3.7 LU after 300 others) */ const spec = { forge: 1, genre: gid, seed: 4 }; if (sound) spec.sound = sound; const s = X.compileSpec(spec), sec = X.peakSectionOf(s);
   const r = renderTrack(gid, 4, { score: s, fromBar: sec.bar0, toBar: sec.bar0 + 8, stems: true }); let fin = true, pk = 0; for (const x of r.L) { if (!isFinite(x)) fin = false; pk = Math.max(pk, Math.abs(x)); }
   const lv = (c) => stemLufs(r.stems[c], r.sr), on = (c) => { const o = []; for (let i = 0; i < s.ev.n; i++) if (s.ev.ch[i] === c && s.ev.t[i] >= r.fromStep) o.push((s.ev.t[i] - r.fromStep) * r.sps); return o; }; return { fin, pk, lv, on, stems: r.stems, sr: r.sr }; }
 for (const [slot, gid] of Object.entries(HOST)) { if (!gid || !X.SOUND_BANK[slot]) continue; const base = measure(gid), c = CH[slot], ref = slot === 'kick' ? base.lv(1) : base.lv(0), b0 = base.lv(c) - ref, bc = clicks(mono(base.stems[c]), base.sr, base.on(c));

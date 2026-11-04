@@ -1,3 +1,79 @@
+# DJ TiTo 10.1 — what changed after the 10.0 listening
+
+The review of 10.0, in your words:
+- the sound was still hard to digest — harsh highs, too loud and squashed, too busy, cheap sounds;
+- the mix carve made no difference you could hear;
+- the FX need to be better, and the ones you didn't like must go;
+- the atmosphere could not be controlled;
+- muting and soloing the channels was clumsy.
+
+## Master: Clean by default
+- **The clips you heard used the Club master.** It drives every genre's drop into its limiter: measured on six genres, the drops kept only 5.6–7.3 dB between their peaks and their average loudness (PLR). That is squashed, and the clipping adds harmonics that tire the ear.
+- **Clean is now the default.** It sits 4 dB under the genre's target into the limiter, and the same drops keep 8.6–10.5 dB.
+- The choice (Club · Balanced · Clean · Home) is now in **SET · Session**. It used to be at the bottom of SET. Exports follow it.
+- A choice saved by 10.0 is not carried over: everyone starts on Clean.
+
+## Smooth: the tiring top end
+- **What carries it, measured per part on the drops:**
+  - the clap/snare: 54–71 % of the 2.5–8 kHz band in house, tech house, afro house and drum & bass;
+  - the hats: 64–89 % of 8–16 kHz;
+  - in trance, the supersaw chords: 68 % of the presence band.
+- **Smooth** is a gentle static EQ on those parts:
+  - clap/snare −3 dB at 3.6 kHz and −2.5 dB above 6.5 kHz;
+  - hats −2 dB above 9 kHz;
+  - chords −2.5 dB at 3.3 kHz and −1.5 dB above 7 kHz;
+  - arp −1.5 dB above 8.5 kHz.
+- A **Smooth** knob on MIX · Deck sound sets how much (0 = the 10.0 sound). It is learned like the other deck-sound knobs.
+
+## Less busy
+- In drops the pad plays at 0.4 instead of 0.6: it is the bed under the chords, lead and arp, not a fourth voice in the middle.
+
+## Channels (MIX)
+- Every part that plays, and the FX and the atmosphere, each with:
+  - **M** (mute);
+  - **S** (solo — several at once);
+  - **◎** (solo this part alone; again to clear);
+  - a level fader with its dB.
+- Solo groups: Drums · Bass · Music · FX · Atmos. **Clear solo** brings everything back and keeps your own mutes.
+- On the PLAY deck, a tap still mutes a part, and **holding it solos it alone**.
+- A part's level is the same one EDIT · Mix shows, and it is learned like before.
+
+## Atmosphere (FX)
+- Choose the background under the track: the track's own, none, vinyl, air, dark, psy or rain.
+- Its **level** (0–2) and its **tone** (dark ↔ bright).
+- A track without an atmosphere of its own gets a steady bed of the one you choose. None silences a track's own.
+- The choice is kept in the track (`fx.atmos`), so a library track brings it back.
+
+## Ear candy (FX)
+- **Six new minimal-techno sounds**, all in key, on the grid and into the candy echo:
+  - **Blip:** tiny FM dots;
+  - **Sonar:** a pitched ping with a long soft tail;
+  - **Click:** a woody tuned tick;
+  - **Dub stab:** a filtered chord stab left to the echo;
+  - **Drop:** water drops;
+  - **Glitch:** an accelerating micro-stutter.
+  
+  They sit 1–3 dB under Bubbles' level, with peaks no higher.
+- Techno, house, chill and afro tracks now use them. Techno's candy used to be Glass, Ping and Acid.
+- **The Ear candy panel** (both decks, remembered in this browser):
+  - every kind on or off. A kind switched off is replaced by one that is on, in the same place;
+  - candy level and density;
+  - **risers and impacts** on or off, with their level.
+- **By default:** Bubbles and the six minimal sounds are on; Glass, Harp, Wind, Acid and Ping are off.
+
+## Tests
+- `tools/control_test.cjs` (engine) checks:
+  - candy kinds are replaced when switched off; density 0 plays none; transitions off keeps the candy;
+  - each minimal sound is in key, has no clicks, and its level and peak sit against Bubbles';
+  - the atmosphere plays where the track has none, level 2 is 6 dB over level 1, the dark tone takes the top off, and None silences it.
+- `tools/control_ui_test.cjs` (browser) checks:
+  - solo on two parts, solo alone, the Drums group, Clear keeping your mute, and the fader;
+  - hold-to-solo on PLAY;
+  - candy and transitions sent to both decks and remembered;
+  - the atmosphere sent, kept in the track, and brought back from the library.
+- `tools/bank_test.cjs` now starts every render from the same noise. Chords/fm-epiano measured +3.7 LU after 300 other presets and +2.5 LU alone.
+- `tools/listen_v101.cjs` makes the listening pack. The master pairs are level-matched (the 10.0 clip turned down after its master, so its squash stays).
+
 # DJ TiTo 10 — what changed
 
 FORGE is now **DJ TiTo**. Version 10 answers the review of 9.5. The asks were:
