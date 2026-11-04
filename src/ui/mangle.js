@@ -33,7 +33,9 @@ function mgClean(x) { if (!x || typeof x !== 'object') return null; const n = (v
   return out; }
 // a track that carries a Mangle state brings it with it (installScore); a track without one leaves the unit off
 function mgFromTrack(i, s) { const D = decks[i], x = s && s.spec && s.spec.fx ? mgClean(s.spec.fx.mangle) : null; if (x) { D.mg = Object.assign({ sel: 0 }, x); if (D.spec) D.spec.fx = { mangle: mgSnapshot(i) }; } else if (D.mg) { D.mg.s[0].on = false; D.mg.s[1].on = false; }
-  if (D.mg) mgSendAll(i); renderMangle(); }
+  if (D.mg) mgSendAll(i); if (i === SHELL.fxDeck) renderMangle(); } // (the panel shows one deck: a load on the other one leaves it alone)
+// the pad's dot placed in percent of the pad: no layout read (9.5.0 measured the pad on every track load — a forced layout, 93 ms on a slow machine)
+function mgDot(pad, x, y) { const d = $('.xpad-dot', pad); d.style.left = `calc(${(x * 100).toFixed(1)}% - 11px)`; d.style.top = `calc(${((1 - y) * 100).toFixed(1)}% - 11px)`; }
 function mgSnapshot(i) { const G = mgOf(i); return { target: G.target, morph: G.morph, wet: G.wet, s: G.s.map((S) => Object.assign({}, S)) }; }
 function buildMangle(el) {
   el.innerHTML = `<h4>Mangle — sound design on deck <span class="os-d">A</span></h4>
@@ -66,7 +68,7 @@ function buildMangle(el) {
   $('[data-mgoff]', el).onclick = () => { const i = SHELL.fxDeck, G = mgOf(i); G.s[0].on = false; G.s[1].on = false; mgSendSlot(i, 0); mgSendSlot(i, 1); renderMangle(); };
   // the touch pad: the selected slot plays while it is held (unless it is on already); x = Macro, y = the first knob
   const pad = $('.mg-pad', el); let held = false, was = false;
-  const at = (e) => { const r = pad.getBoundingClientRect(), x = clamp((e.clientX - r.left) / r.width, 0, 1), y = clamp(1 - (e.clientY - r.top) / r.height, 0, 1), c = cur(); c.S.macro = Math.round(x * 100) / 100; c.S.a = Math.round(y * 100) / 100; $('.xpad-dot', pad).style.transform = `translate(${x * r.width}px, ${(1 - y) * r.height}px)`; return c; };
+  const at = (e) => { const r = pad.getBoundingClientRect(), x = clamp((e.clientX - r.left) / r.width, 0, 1), y = clamp(1 - (e.clientY - r.top) / r.height, 0, 1), c = cur(); c.S.macro = Math.round(x * 100) / 100; c.S.a = Math.round(y * 100) / 100; mgDot(pad, x, y); return c; };
   pad.onpointerdown = async (e) => { pad.setPointerCapture(e.pointerId); held = true; await startAudio(); const c = at(e); was = c.S.on; c.S.on = true; mgSendSlot(c.i, c.q); renderMangle(true); };
   pad.onpointermove = (e) => { if (!held) return; const c = at(e); mgSendSlot(c.i, c.q); renderMangle(true); };
   pad.onpointerup = pad.onpointercancel = () => { if (!held) return; held = false; const c = cur(); if (!was) { c.S.on = false; mgSendSlot(c.i, c.q); } renderMangle(); };
@@ -74,7 +76,7 @@ function buildMangle(el) {
 function renderMangle(light) { const el = $('.mangle'); if (!el) return; const i = SHELL.fxDeck, G = mgOf(i), S = G.s[G.sel], spec = MG_SPEC[S.mode];
   $$('[data-mgs]', el).forEach((b) => { const q = +b.dataset.mgs, on = q === G.sel; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); $('.mg-led', b).classList.toggle('lit', G.s[q].on); });
   const on = $('.mg-on', el); on.classList.toggle('lit', S.on); on.setAttribute('aria-pressed', S.on ? 'true' : 'false'); on.textContent = `${'AB'[G.sel]} ${S.on ? 'ON' : 'OFF'}`;
-  { const pad = $('.mg-pad', el), r = pad.getBoundingClientRect(); if (r.width) $('.xpad-dot', pad).style.transform = `translate(${S.macro * r.width}px, ${(1 - S.a) * r.height}px)`; } // the pad's dot shows where the Macro and the first knob stand
+  mgDot($('.mg-pad', el), S.macro, S.a); // the pad's dot shows where the Macro and the first knob stand
   for (const r of $$('[data-mgk]', el)) if (document.activeElement !== r) r.value = S[r.dataset.mgk]; for (const r of $$('[data-mgx]', el)) if (document.activeElement !== r) r.value = G[r.dataset.mgx];
   if (light) return;
   $$('[data-mgm]', el).forEach((b) => { const sel = b.dataset.mgm === S.mode; b.classList.toggle('on', sel); b.setAttribute('aria-pressed', sel ? 'true' : 'false'); });

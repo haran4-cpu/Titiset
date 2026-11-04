@@ -2,11 +2,12 @@
 // a new track's palette sounds and Auto's sound swaps use this table — the same level match, without rendering on the UI
 // thread (measured: 250 ms mean, 1.3 s worst per new track). Writes src/compose/preset_gain.js. Usage: node tools/preset_gain.cjs [genres|all] [slots]
 // (slots: re-measure only those slots, e.g. `all bass` after a bass preset changed; the rest of the table is kept)
+// (names: a third list re-measures only those sounds, e.g. `all arp,lead nylon-arp,koto-lead` after one engine changed)
 const fs = require('fs'), path = require('path'); const X = require('./load.cjs').load();
-const G = process.argv[2] && process.argv[2] !== 'all' ? process.argv[2].split(',') : X.GENRES.map((g) => g.id), SEEDS = [1, 2, 3], ONLY = process.argv[3] ? process.argv[3].split(',') : null;
+const G = process.argv[2] && process.argv[2] !== 'all' ? process.argv[2].split(',') : X.GENRES.map((g) => g.id), SEEDS = [1, 2, 3], ONLY = process.argv[3] ? process.argv[3].split(',') : null, NAMES = process.argv[4] ? process.argv[4].split(',') : null;
 const OUT = path.join(__dirname, '..', 'src', 'compose', 'preset_gain.js'); let table = {}; try { table = JSON.parse(fs.readFileSync(OUT, 'utf8').replace(/^[^{]*/, '').replace(/;\s*$/, '')); } catch (e) { table = {}; }
 for (const gid of G) { const pal = X.paletteFor(gid); if (!ONLY || !table[gid]) table[gid] = {};
-  for (const slot in pal) { if (ONLY && !ONLY.includes(slot)) continue; table[gid][slot] = {}; for (const name of pal[slot]) { const fs2 = [];
+  for (const slot in pal) { if (ONLY && !ONLY.includes(slot)) continue; if (!NAMES || !table[gid][slot]) table[gid][slot] = {}; for (const name of pal[slot]) { if (NAMES && !NAMES.includes(name)) continue; const fs2 = [];
       for (const seed of SEEDS) { const spec = { forge: 1, genre: gid, seed, sound: { [slot]: { preset: name } } }; const { G: GC, names } = X.deriveContract(JSON.parse(JSON.stringify(spec)));
         const score = X.composeTrack(gid, seed, { contract: GC }); const m = names.match[0]; if (!m) continue; const key = slot === 'arp' ? (score.kits.hook ? 'hook' : 'arp') : slot, kit = score.kits[key]; if (!kit) continue;
         const f = X.contextMatch(score, slot, m.base, kit); if (f != null) fs2.push(f); }
