@@ -298,7 +298,10 @@ function warmUp(m, sr) { const E = new Engine(sr), L = new Float32Array(128), R 
       const kd = new Kick(sr), sn = new Snare(sr), ht = new Hats(sr), pc = new Perc(sr), fx = new Fx(sr), tx = new Texture(sr); kd.setTempo(124); kd.setKit({ rumble: 0.5 }); sn.setKit({ layer: 0.5 }); fx.setTempo(124);
       for (let k = 0; k < 4; k++) { kd.trigger(0, 0.9); sn.trigger(0, 0.9, SNARE_KIND[k] || 'snare'); B(kd, 20); B(sn, 20); }
       for (let k = 0; k < 6; k++) { ht.trigger(0, 0.9, k, 0); B(ht, 30); } for (const n of PERC_NAMES) { pc.trigger(0, 0.9, n, 60, 0); B(pc, 20); }
-      for (let k = 0; k < FX_GAIN.length; k++) { fx.trigger(0, k, 0.8, 128 * 30, 64, 0.3); B(fx, 30); } for (let k = 1; k <= 5; k++) { tx.set(k, 1, 64); tx.setChord(0x91, 0); B(tx, 40); tx.setChord(0x491, 5); B(tx, 40); }
+      for (let k = 0; k < FX_GAIN.length; k++) { fx.trigger(0, k, 0.8, 128 * 30, 64, 0.3); B(fx, 30); }
+      // (v9.5) every transition recipe once (its layers: noise filters, saws, the tonal staircase, rolls, gates, sub drop, impact, swell): the first build of a set used to
+      // compile them on the audio thread — 72–85 ms blocks at a drop in the browser certification
+      for (let r = 0; r < TX_RECIPES.length; r++) { fx.trigger(0, 13, 0.8, 128 * 8, 64, 0.3, r); B(fx, 8); } fx.stopAll && fx.stopAll(); B(fx, 4); for (let k = 1; k <= 5; k++) { tx.set(k, 1, 64); tx.setChord(0x91, 0); B(tx, 40); tx.setChord(0x491, 5); B(tx, 40); }
   return E; }
 if (typeof AudioWorkletProcessor !== 'undefined') {
   class ForgeProcessor extends AudioWorkletProcessor {
