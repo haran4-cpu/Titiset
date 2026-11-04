@@ -21,11 +21,11 @@
     const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st); { const sp = document.getElementById('splash'); if (sp) sp.hidden = true; }
     const P = document.createElement('div'); P.id = 'hwc'; document.body.appendChild(P);
     const genres = (F.auto && F.auto.GENRES) || [], engine = (() => { try { return localStorage.getItem('forge.engine2') || 'live'; } catch (e) { return 'live'; } })();
-    P.innerHTML = `<button class="x" id="hwcx" title="hide">×</button><h2>FORGE hardware check</h2><p class="sub">Plays one track on this machine's sound card and measures it. Turn the volume to a comfortable level and listen.</p>
+    P.innerHTML = `<button class="x" id="hwcx" title="hide">×</button><h2>DJ TiTo hardware check</h2><p class="sub">Plays one track on this machine's sound card and measures it. Turn the volume to a comfortable level and listen.</p>
       <label>Engine</label><select id="hwcEng"><option value="live"${engine === 'live' ? ' selected' : ''}>Live (default)</option><option value="fast"${engine === 'fast' ? ' selected' : ''}>Live · fast</option><option value="buffered"${engine === 'buffered' ? ' selected' : ''}>Stable (renders ahead)</option></select>
       <div class="row"><div><label>Track</label><select id="hwcGen">${genres.map((g) => `<option value="${g.id}"${g.id === 'techno' ? ' selected' : ''}>${esc(g.name)}</option>`).join('')}</select></div>
       <div><label>Length</label><select id="hwcDur"><option value="60">1 minute</option><option value="180" selected>3 minutes</option><option value="600">10 minutes</option></select></div></div>
-      <label>MIDI loopback <span class="dim">(optional: send FORGE's clock out of one port and read it back on another)</span></label>
+      <label>MIDI loopback <span class="dim">(optional: send DJ TiTo's clock out of one port and read it back on another)</span></label>
       <div class="row"><div><select id="hwcOut"><option value="">output: none</option></select></div><div><select id="hwcIn"><option value="">input: none</option></select></div></div>
       <button id="hwcScan">Scan MIDI ports</button><button class="go" id="hwcRun">Run the check</button><div class="bar"><i id="hwcBar"></i></div><div id="hwcMsg" class="dim">${location.protocol === 'file:' ? '<span class="warn">Opened from a file: the browser then runs the slower fallback engine. For a real check serve this folder (python3 -m http.server 8000) and open http://localhost:8000/selfcheck.html.</span>' : 'Ready.'}</div><div id="hwcRes"></div>`;
     $('#hwcx', P).onclick = () => { P.style.display = 'none'; };
@@ -81,7 +81,7 @@
       else if (o.midi && o.midi.note) add('warn', 'MIDI clock', o.midi.note); return v; }
     function ask() { const res = $('#hwcRes', P); res.innerHTML = `<div style="margin-top:6px">What did you hear?</div>` + ['clean', 'a few clicks', 'dropouts / stutter', 'distortion', 'other'].map((k) => `<button data-ear="${k}">${k}</button>`).join('');
       res.querySelectorAll('[data-ear]').forEach((b) => { b.onclick = () => { ST.ear = b.dataset.ear; if (ST.ear === 'other') { const t = prompt('Describe what you heard:'); if (t) ST.ear = 'other: ' + t; } finish(); }; }); }
-    function text() { const o = ST.result; const L = ['FORGE hardware check · ' + o.when, `machine: ${o.platform}, ${o.cores} cores${o.memoryGB ? ', ≥ ' + o.memoryGB + ' GB' : ''} · ${o.ua}`, `engine: ${o.engine} (requested ${o.requestedEngine}) · ${o.sampleRate} Hz · base latency ${o.baseLatencyMs} ms · output latency ${o.outputLatencyMs} ms · app estimate ${o.appLatencyEstimateMs} ms · DSP voices ${o.wasm ? 'WebAssembly' : 'JavaScript'}`,
+    function text() { const o = ST.result; const L = ['DJ TiTo hardware check · ' + o.when, `machine: ${o.platform}, ${o.cores} cores${o.memoryGB ? ', ≥ ' + o.memoryGB + ' GB' : ''} · ${o.ua}`, `engine: ${o.engine} (requested ${o.requestedEngine}) · ${o.sampleRate} Hz · base latency ${o.baseLatencyMs} ms · output latency ${o.outputLatencyMs} ms · app estimate ${o.appLatencyEstimateMs} ms · DSP voices ${o.wasm ? 'WebAssembly' : 'JavaScript'}`,
         `track: ${o.track}, ${o.seconds} s`, `heard: ${ST.ear}`, ''];
       for (const x of o.verdicts) L.push(`${x.lvl === 'ok' ? '✓' : x.lvl === 'warn' ? '!' : '✗'} ${x.what}: ${x.detail}`); return L.join('\n'); }
     function finish() { const o = ST.result; if (ST.ear && ST.ear !== 'clean') o.verdicts.push({ lvl: 'bad', what: 'what you heard', detail: ST.ear }); else o.verdicts.push({ lvl: 'ok', what: 'what you heard', detail: ST.ear }); o.heard = ST.ear;

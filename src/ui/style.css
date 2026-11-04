@@ -518,7 +518,9 @@ body.shell { height: 100vh; height: 100dvh; overflow: hidden; padding-bottom: 0 
 .shell .dock .dk-fold { display: none; }
 .shell .dock.folded .dk-body { display: block; }
 /* SET */
-.set-tools { display: flex; flex-wrap: wrap; gap: 8px; }
+.set-tools, .set-new { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; } .set-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.set-h { margin: 0; font-size: 16px; } /* (v10) SET: Session · My library · Styles · New tracks · Your sound */
+.set-row #recBtn { min-width: 112px; font-weight: 600; } .set-row #recBtn:not(.rec)::before { content: '● '; color: var(--crit); }
 .shell .screen[data-screen=set] .tele { margin-left: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 12px; }
 .shell .screen[data-screen=set] .lufs { width: 100%; }
 .shell .deck [data-act=play], .shell .deck [data-act=mix] { display: none; } /* their home is the transport row */

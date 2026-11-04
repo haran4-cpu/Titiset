@@ -26,7 +26,7 @@ function healthMeter(m) { if (!HEALTH.t0) return; const u = A.under || 0;
     decks: [0, 1].map((i) => decks[i].playing ? (decks[i].gid || '') + '@' + Math.round(decks[i].pos || 0) : '-'), long: DIAG.long });
   if (HEALTH.samples.length > 1800) HEALTH.samples.splice(0, 300); }
 const FORGE_VER = 'v__FORGE_VERSION__ · build __FORGE_BUILD__';
-function healthEnv() { const c = A.ctx, n = navigator; return { app: 'FORGE', version: FORGE_VER, when: new Date().toISOString(), ua: n.userAgent, platform: (n.userAgentData && n.userAgentData.platform) || n.platform, cores: n.hardwareConcurrency, memoryGB: n.deviceMemory || null,
+function healthEnv() { const c = A.ctx, n = navigator; return { app: 'DJ TiTo', version: FORGE_VER, when: new Date().toISOString(), ua: n.userAgent, platform: (n.userAgentData && n.userAgentData.platform) || n.platform, cores: n.hardwareConcurrency, memoryGB: n.deviceMemory || null,
   screen: `${screen.width}×${screen.height} @${devicePixelRatio}`, engine: A.mode, enginePref: engPref(), android: ANDROID, renderAheadMs: A.worker && c ? Math.round((A.leadF || 0) / c.sampleRate * 1000) : null, sampleRate: c ? c.sampleRate : null, baseLatencyMs: c ? +(c.baseLatency * 1000).toFixed(1) : null, outputLatencyMs: c && c.outputLatency ? +(c.outputLatency * 1000).toFixed(1) : null,
   glitchCounter: A.worker ? 'player underruns (buffered engine)' : A.underKnown ? `sound card (${A.psApi || 'playoutStats'})` : 'not available in this browser', crossOriginIsolated: !!window.crossOriginIsolated, dspVoices: meter && meter.wasm ? 'WebAssembly' : 'JavaScript' }; }
 function healthSummary() { const g = HEALTH.glitches, d = HEALTH.samples, mins = hNow() / 60000; const loads = d.map((s) => s.load).sort((a, b) => a - b);

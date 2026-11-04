@@ -1,11 +1,11 @@
-<title>FORGE Decks · v__FORGE_VERSION__</title>
+<title>DJ TiTo · v__FORGE_VERSION__</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <script>document.addEventListener('DOMContentLoaded', function () { var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'https://fonts.googleapis.com/css2?family=Azeret+Mono:wght@400;500;600&family=Barlow:wght@400;500;600;700&family=Big+Shoulders+Display:wght@700;800&display=swap'; document.head.appendChild(l); });</script>
 <style>/*__CSS__*/</style>
 </head><body>
 <div class="app">
   <header class="top">
-    <div class="brand">FORGE <small>generative decks · 33 genres · sample-accurate</small></div>
+    <div class="brand">DJ TiTo <small>generative decks · 33 genres · sample-accurate</small></div>
     <button class="power" id="power">Start audio</button>
     <button class="power" id="ctlBtn" title="Connect a MIDI controller, learn mappings, clock and note out">Controller</button>
     <div class="tele" aria-live="off">
@@ -41,7 +41,7 @@
     </aside>
   </main>
   <section class="lib" aria-label="Genre library">
-    <div class="libhead"><h3>Library</h3><div class="fams"></div>
+    <div class="libhead"><h3>Styles</h3><div class="fams"></div>
 </div>
     <div class="tiles"></div>
   </section>
@@ -53,9 +53,9 @@
   <dt>Shift + 1–6</dt><dd>FX rack: sweep · phaser · flanger · echo · crush · gate</dd><dt>F1–F4</dt><dd>hot cue 1–4: set (empty) / jump on the next bar · Shift clears</dd><dt>P</dt><dd>Perform view (pads only)</dd><dt>/</dt><dd>Ask: describe a track or a change in words</dd><dt>Ctrl/⌘ Z</dt><dd>undo / redo (Shift) an edit</dd><dt>Esc</dt><dd>SAFE: all FX off, filters centred, loops released, Auto paused, an armed mix disarmed</dd><dt>Shift + Esc</dt><dd>cancel the mix (the outgoing track back to full)</dd><dt>?</dt><dd>this help</dd></dl></div></div>
 <div class="splash" id="splash">
   <div class="card">
-    <h1>FORGE</h1>
+    <h1>DJ TiTo</h1>
     <p>Two synthesized decks. Every track is composed from a genre contract — tempo, drum grammar, bass grammar, harmony, arrangement — and played by an audio-thread engine that times every hit to the sample. Mix by hand, or let Auto-DJ run an endless, phrase-aligned, key-compatible set.</p>
-    <p class="new"><b>New in 9.5</b> · My library: save tracks with your edits, build playlists and play a prepared set · FORGE learns your sound — the mood you pick stays, new tracks lean your way · Mangle: eight sound-design engines on the FX screen · 66 layered risers, drops and impacts in key · ear candy rebuilt · drums with ratchets, flams and the same six knobs on every kit · Answer bar and smarter pattern tools · Octave for every part</p>
+    <p class="new"><b>New in 9.5</b> · My library: save tracks with your edits, build playlists and play a prepared set · DJ TiTo learns your sound — the mood you pick stays, new tracks lean your way · Mangle: eight sound-design engines on the FX screen · 66 layered risers, drops and impacts in key · ear candy rebuilt · drums with ratchets, flams and the same six knobs on every kit · Answer bar and smarter pattern tools · Octave for every part</p>
     <div class="row"><label class="lbl" for="startGenre">Start with</label><select id="startGenre" class="btn"></select><label class="row"><input type="checkbox" id="startAuto" checked> <span>Auto-DJ</span></label></div>
     <div class="row"><label class="lbl" for="startEngine">Playing for</label><select id="startEngine" class="btn" title="How the audio engine trades steadiness for delay to the controls. Gig: the biggest buffer the browser gives — the steadiest audio on any machine (the knobs answer about a quarter of a second later, more on some devices). Live: balanced (~70 ms). Studio: the smallest buffer (~30 ms) for a strong, quiet machine."><option value="safe">A gig — steadiest audio</option><option value="live">Live — balanced</option><option value="fast">Studio — fastest response</option></select></div>
     <div class="row"><button class="btn big" id="go">Start the set</button><button class="btn" id="skip">Explore first</button></div>

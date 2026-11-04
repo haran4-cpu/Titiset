@@ -45,15 +45,21 @@ function buildShell() { const app = $('.app'), con = $('.console'); if (!app || 
   const pads = document.createElement('div'); pads.className = 'fx-pads'; into('fx').appendChild(pads); for (const p of $$('.perf')) pads.appendChild(p);
   // EDIT: the editor
   const dock = $('#dock'); if (dock) { into('edit').appendChild(dock); DOCK.open = true; renderDock(); }
-  // SET: the library, the Ask bar, the header's controls and telemetry
-  const lib = $('.lib'); const top = $('.top'); const set = into('set'); const ask = $('.askbar'); if (ask) set.appendChild(ask);
-  { const lp = document.createElement('div'); lp.className = 'lenpick'; lp.innerHTML = `<span class="lbl">New tracks</span><div class="seg" role="group" aria-label="Length of new tracks">${TRACK_LENS.map(([k, l, d]) => `<button data-len="${k}" title="${d}">${l}</button>`).join('')}</div>`; set.appendChild(lp); // (v9.4) Radio · Club · Extended
+  // SET (v10 order): the session first — record, set files, cue, controller, safe, perform — then My library and the playlists, then the
+  // styles (the genre library), then making new tracks (Ask, length), then Your sound and the telemetry
+  const lib = $('.lib'); const top = $('.top'); const set = into('set'); const ask = $('.askbar');
+  if (top) { const tools = document.createElement('section'); tools.className = 'set-tools'; tools.setAttribute('aria-label', 'Session'); tools.innerHTML = '<h3 class="set-h">Session</h3><div class="set-row"></div>'; const row = $('.set-row', tools);
+    for (const id of ['recBtn', 'setBtn', 'cueBtn', 'ctlBtn', 'safeBtn', 'perfBtn', 'power']) { const b = $('#' + id, top); if (b) row.appendChild(b); } for (const b of $$('button.power', top)) row.appendChild(b); set.appendChild(tools); }
+  const mylibSlot = document.createElement('div'); mylibSlot.className = 'mylib-slot'; set.appendChild(mylibSlot);
+  if (lib) { set.appendChild(lib); }
+  const mk = document.createElement('section'); mk.className = 'set-new'; mk.setAttribute('aria-label', 'New tracks'); mk.innerHTML = '<h3 class="set-h">New tracks</h3>'; set.appendChild(mk); if (ask) mk.appendChild(ask);
+  { const lp = document.createElement('div'); lp.className = 'lenpick'; lp.innerHTML = `<span class="lbl">Length</span><div class="seg" role="group" aria-label="Length of new tracks">${TRACK_LENS.map(([k, l, d]) => `<button data-len="${k}" title="${d}">${l}</button>`).join('')}</div>`; mk.appendChild(lp); // (v9.4) Radio · Club · Extended
     const paint = () => $$('[data-len]', lp).forEach((b) => { const on = b.dataset.len === TRACK_LEN.v; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
     $$('[data-len]', lp).forEach((b) => b.onclick = () => { TRACK_LEN.v = b.dataset.len; try { localStorage.setItem('forge.len', TRACK_LEN.v); } catch (e) { /* per-viewer convenience only */ } paint(); toast(`New tracks: ${b.textContent} — ${b.title}`); }); paint(); }
-  if (lib) set.appendChild(lib); buildMyLib(); buildTaste(); /* (v9.5) My library above the genre library, Your sound under it */
-  if (top) { const tools = document.createElement('div'); tools.className = 'set-tools'; for (const b of $$('button.power', top)) tools.appendChild(b); set.appendChild(tools); const tele = $('.tele', top); if (tele) set.appendChild(tele); }
+  buildMyLib(); buildTaste(); /* (v9.5) My library goes in its slot (above the styles); Your sound after New tracks */
+  if (top) { const tele = $('.tele', top); if (tele) set.appendChild(tele); }
   // the status bar (not interactive) and the tab bar
-  if (top) { const st = document.createElement('div'); st.className = 'status'; st.innerHTML = `<b>FORGE</b><span class="st-bpm">—</span><span class="st-lufs">—</span><span class="st-mix"></span>`; top.appendChild(st); }
+  if (top) { const st = document.createElement('div'); st.className = 'status'; st.innerHTML = `<b>DJ TiTo</b><span class="st-bpm">—</span><span class="st-lufs">—</span><span class="st-mix"></span>`; top.appendChild(st); }
   const tb = document.createElement('nav'); tb.className = 'tabbar'; tb.setAttribute('aria-label', 'Screens'); tb.innerHTML = SCREENS.map(([k, l]) => `<button data-go="${k}" aria-label="${l} screen">${l}</button>`).join(''); document.body.appendChild(tb);
   $$('[data-go]', tb).forEach((b) => b.onclick = () => go(b.dataset.go));
   // the current screen follows the scroller (a swipe), never the other way round

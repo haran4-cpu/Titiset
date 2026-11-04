@@ -2,7 +2,7 @@
   "name": "forge",
   "version": "9.5.0",
   "private": true,
-  "description": "FORGE generative two-deck engine: dev tooling for the build, the tests and the verification (the app itself has no dependencies)",
+  "description": "DJ TiTo (formerly FORGE) generative two-deck engine: dev tooling for the build, the tests and the verification (the app itself has no dependencies)",
   "scripts": {
     "build": "node tools/build.cjs",
     "ci": "node tools/ci.cjs",
