@@ -12,6 +12,8 @@ const SNARE_KIND = ['snare', 'clap', 'rim', null];
 const ARR_TARGET = { drums0: -5, drums1: -3, intro: -4.5, groove: -1.5, groove2: -1, verse: -2, break: -4.5, break2: -5.5, build: -2.5, drop: 0, outro: -2.5, chillA: -2, chillB: 0, ambA: -3, ambB: 0 };
 const TYPE_LAYER = { intro: 'drums1', groove: 'groove', break: 'break', build: 'build', drop: 'drop', outro: 'outro' };
 const BUILD_RAMP = 0; // no extra gain ramp: the riser and the snare roll already swell; a ramp on top made the end of the build as loud as the drop
+const DRUM_SLOTS = ['kick', 'snare', 'hats', 'perc'], DRUM_CH = { kick: 0, snare: 1, hats: 2, perc: 3 };
+const DRUM_U = { uTune: [-12, 12], uDecay: [-1, 1], uTone: [-1, 1], uSnap: [0, 1], uDrive: [0, 1], uLevel: [-18, 6] }; // (v9.5) the six knobs every drum has (Deck.uniform)
 const SPREAD = [-0.32, 0.28, -0.12, 0.36, -0.26, 0.14, -0.38, 0.3, -0.18, 0.22, -0.3, 0.34]; // chord voices fan out by pitch class (lows stay centred)
 const HAT_KEYS = ['hc', 'ho', 'ride', 'shk', 'crash', 'hp'], BANK_PERC = new Set(['tom', 'conga', 'bongo', 'cowbell', 'clave', 'tamb']); // hat kind → bank voice; the percussion the bank renders
 const PERC_NAMES = Object.keys(PERC_KINDS); // the kind index of a percussion event → name (02_drums.js owns the list and its order)
@@ -43,6 +45,7 @@ class Deck {
     // between genres (a hard-techno rumble or a rim snare survived into the next house track — and never in offline renders)
     for (const d of [this.kick, this.snare, this.hats, this.perc]) { if (!d.p0) d.p0 = Object.assign({}, d.p); d.p = Object.assign({}, d.p0); }
     this.kick.setKit(k.kick); this.snare.setKit(k.snare); this.hats.setKit(k.hats); this.perc.setKit(k.perc); this.bass.setKit(k.bass); this.setDrums(k, score.meta.gid, true);
+    this.key = score.meta.key | 0; this.du = {}; this.dBase = {}; for (const sl of DRUM_SLOTS) { const d = this[sl]; this.dBase[sl] = Object.assign({}, d.p); this.uniform(sl, k[sl] || {}, true); } // (v9.5) the six knobs every drum has
     if (k.chords) this.chords.setKit(k.chords); if (k.pad) this.pad.setKit(k.pad);
     this.lead = score.roles.lead === 'seq' || score.roles.lead === 'riff' ? this.leadMono : this.leadPoly; if (k.lead) this.lead.setKit(k.lead); // sequences and riffs are monophonic lines with glide
     const a = k.hook || k.arp; if (a) this.arp.setKit(a);
@@ -54,12 +57,28 @@ class Deck {
   tweak(slot, prm) { const syn = { bass: this.bass, chords: this.chords, pad: this.pad, lead: this.lead, arp: this.arp }[slot];
     if (syn) { Object.assign(syn.p, prm); if (prm.model != null && MODEL[prm.model] != null) syn.m = MODEL[prm.model]; if (slot === 'lead') { const o = this.lead === this.leadMono ? this.leadPoly : this.leadMono; Object.assign(o.p, syn.p); o.m = syn.m; } return; }
     if (slot === 'drums') { if (prm.family != null) this.bankP.setFamily(prm.family); return; }
-    if (prm.bank && (slot === 'snare' || slot === 'hats' || slot === 'perc')) { this.bankP.prm[slot] = Object.assign({}, BANK_DEF, this.bankP.prm[slot], prm.bank); return; }
-    const d = { kick: this.kick, snare: this.snare, hats: this.hats, perc: this.perc }[slot]; if (d) d.setKit(prm); }
+    if (prm.bank && (slot === 'snare' || slot === 'hats' || slot === 'perc')) { this.bankP.prm[slot] = Object.assign({}, BANK_DEF, this.bankP.prm[slot], prm.bank); if (this.bBase) this.bBase[slot] = Object.assign({}, BANK_DEF, this.bBase[slot], prm.bank); if (this.du && this.du[slot]) this.uniform(slot, {}); return; }
+    const d = { kick: this.kick, snare: this.snare, hats: this.hats, perc: this.perc }[slot]; if (!d) return; const U = {}, own = {}; for (const k in prm) (DRUM_U[k] ? U : own)[k] = prm[k];
+    if (Object.keys(own).length) { d.setKit(own); if (this.dBase && this.dBase[slot]) Object.assign(this.dBase[slot], own); } if (this.du && (Object.keys(U).length || own.keyTrack != null)) this.uniform(slot, U); }
+  // (v9.5) THE SAME SIX KNOBS ON EVERY DRUM: uTune (semitones), uDecay and uTone (−1…1, 0 = as designed) work on whatever plays the part —
+  // the synthesized voice (mapped onto its own parameters, from the kit as loaded and as its own knobs set it), the kit family's
+  // one-shot or your own sample (the bank's Tune / Decay / Tone); uSnap and uDrive (0…1) add the channel's transient shaper and
+  // saturator, uLevel (dB, −18…+6) its level — so they mean the same on an 808-style snare, a synthesized one and a sample.
+  // keyTrack (kick): its body tuned to the track's key (the root between 38 and 62 Hz)
+  uniform(slot, u, fresh) { const d = this[slot], B = this.dBase && this.dBase[slot]; if (!d || !B) return; const cur = this.du[slot] = fresh ? {} : this.du[slot] || {}; for (const k in DRUM_U) if (u[k] != null && Number.isFinite(+u[k])) cur[k] = clamp(+u[k], DRUM_U[k][0], DRUM_U[k][1]);
+    if (u.keyTrack != null) cur.keyTrack = u.keyTrack ? 1 : 0;
+    const t = Math.pow(2, (cur.uTune || 0) / 12), dc = Math.pow(2, 1.5 * (cur.uDecay || 0)), o = cur.uTone || 0, q = {};
+    if (slot === 'kick') { let f = B.fEnd; if (cur.keyTrack) { f = mtof(24 + (this.key % 12)); while (f < 38) f *= 2; while (f > 62) f /= 2; } q.fEnd = f * t; q.fStart = B.fStart * (q.fEnd / B.fEnd); if (B.len > 0) q.len = clamp(B.len * dc, 0.08, 2.5); else q.aDec = clamp(B.aDec * dc, 0.03, 2); q.lp = clamp(B.lp * Math.pow(2, 2 * o), 600, 18000); q.click = clamp(B.click * (1 + 0.8 * o), 0, 1); }
+    else if (slot === 'snare') { q.tone = B.tone * t; q.tone2 = B.tone2 * t; q.clapF = B.clapF * t; q.rimF = B.rimF * t; q.nDec = clamp(B.nDec * dc, 0.02, 1.2); q.toneDec = clamp(B.toneDec * dc, 0.01, 0.6); q.clapTail = clamp(B.clapTail * dc, 0.03, 1); q.nLp = clamp(B.nLp * Math.pow(2, 1.5 * o), 1500, 18000); q.nHp = clamp(B.nHp * Math.pow(2, o), 200, 6000); }
+    else if (slot === 'hats') { q.base = B.base * t; q.rideF = B.rideF * t; q.cDec = clamp(B.cDec * dc, 0.006, 0.4); q.oDec = clamp(B.oDec * dc, 0.04, 2); q.shakDec = clamp(B.shakDec * dc, 0.02, 0.4); q.hpF = clamp(B.hpF * Math.pow(2, 1.2 * o), 1500, 15000); q.bpF = clamp(B.bpF * Math.pow(2, 0.8 * o), 2000, 16000); }
+    else { q.pitch = clamp(B.pitch * t, 0.25, 4); q.dec = clamp(B.dec * dc, 0.1, 6); q.noise = clamp(B.noise * (1 + 0.8 * o), 0, 3); }
+    d.setKit(q);
+    if (slot !== 'kick') { const P = this.bankP, bb = this.bBase && this.bBase[slot] ? this.bBase[slot] : (this.bBase = this.bBase || {}, this.bBase[slot] = Object.assign({}, BANK_DEF, P.prm[slot])); P.prm[slot] = Object.assign({}, bb, { tune: clamp((bb.tune || 0) + (cur.uTune || 0), -24, 24), decay: clamp((bb.decay ?? 1) * Math.min(1, dc), 0.02, 1), tone: clamp((bb.tone || 0) + o, -1, 1) }); }
+    const c = DRUM_CH[slot], M = this.mix; M.uTr[c] = cur.uSnap || 0; M.uSat[c] = cur.uDrive || 0; M.ul[c] = dbToGain(cur.uLevel || 0); M.setCharacter(M.heat, M.punch); }
   // (v9.3) the drum family of a track: the set file's choice (kits.drumFam), else its genre's; Tune / Decay / Tone / Snap per part
   // (kits.drumPrm). A new track restarts the round robin (an offline render and the live deck play the same variants)
-  setDrums(k, gid, fresh) { const B = this.bankP; B.setFamily(k.drumFam || BANK_FOR_GENRE[gid] || 'forge'); B.prm = {}; const P = k.drumPrm || {};
-    for (const s of ['snare', 'hats', 'perc']) if (P[s]) B.prm[s] = Object.assign({}, BANK_DEF, P[s]); if (fresh) B.rr = {}; }
+  setDrums(k, gid, fresh) { const B = this.bankP; B.setFamily(k.drumFam || BANK_FOR_GENRE[gid] || 'forge'); B.prm = {}; const P = k.drumPrm || {}; this.bBase = {};
+    for (const s of ['snare', 'hats', 'perc']) { if (P[s]) B.prm[s] = Object.assign({}, BANK_DEF, P[s]); this.bBase[s] = Object.assign({}, BANK_DEF, P[s]); } if (fresh) B.rr = {}; }
   // the drum hits: the family's one-shots when they are here (or the person's own sample of that voice), else the synthesized voices
   hitSnare(off, v, kind) { const P = this.snare.p, k = kind || P.kind, key = k === 'clap' ? 'cp' : k === 'rim' ? 'rim' : 'sn', B = this.bankP;
     if (P.synth || !B.has(key)) { this.snare.trigger(off, v, kind); return; } const g = P.gain ?? 1; B.trigger(off, v, key, 1, 0, 0, g);

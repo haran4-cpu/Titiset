@@ -56,6 +56,7 @@ class Engine {
       case 'color': D.mix.setColor(typeof m.kind === 'string' ? m.kind : null, m.v); break; // (v9.3) the Color FX knob: kind filter | dub | space | noise | crush, v −1…1
       case 'groove': if (m.density != null) D.density = clamp(m.density, 0, 1); if (m.swing != null) { const G = GENRE_BY_ID[D.gid]; D.swingX = Math.max(0, (clamp(m.swing, 50, 75) - (G ? G.swing : 50)) / 50); } break; // (v9.3) Density 0…1 (0.5 = as written), Swing 50…75 % (at least the genre's own)
       case 'fx': if (m.name === 'repeat' || m.name === 'tape' || m.name === 'swirl') { D.liveMotion(m.name, m.on, m.amt); break; } { const i = FX_NAMES.indexOf(m.name), part = m.ch != null && m.ch >= 0 && m.ch < NCH; if (part && m.on) { if (D.mix.pfxCh !== (m.ch | 0)) for (let k = 0; k < FX_N; k++) D.mix.pfx.set(k, false); D.mix.pfxCh = m.ch | 0; } (part ? D.mix.pfx : D.mix.dfx).set(i, m.on, m.amt, m.beat, m.p, !!m.q); } break; /* (v9.3) beat: an index into FX_BEATS; p: the effect's own parameters; q: switch on the next beat; ch: one part only */ // performance FX rack: { name, on, amt } // live sound edit (no re-compose)
+      case 'mangle': D.mix.mangle.set(m); break; // (v9.5) { slot 0|1, on, mode, macro, a, b, c, sub, hold } · { morph } · { wet } · { target: -1 deck | a channel }
       case 'sends': { const c = Object.assign({}, D.sendCfg || { verb: 0.2, delay: 0.15, sc: 0.3 }, m.p); D.sendCfg = c; D.mix.setSends(c); D.applyAuto(); break; }
       case 'fxNow': D.fx.trigger(off, m.kind | 0, m.v ?? 1, (m.until != null ? Math.max(1, m.until - (D.pos + off / D.sps)) : m.steps || 16) * D.sps, m.note || 0, m.pan || 0, m.rec | 0); break; // performance FX: riser 0 · impact 1 · down 2 · sweep 3 · snare-up 4 — m.until: it ends exactly on that step, wherever it starts
       // a command that waits for the deck to reach a step — the engine does the timing, as for a quantised jump, so the render-ahead, the output
@@ -133,7 +134,7 @@ class Engine {
   // never broken. The render-ahead worker steps by its own load and cushion (engine_worker.js), the worklet by its load
   roomFor(D) { const sp = D.space; if (sp) this.master.setSpace(sp[0], sp[1]); }
   // (v9.3) the live engine's effect lines, made once at start (not on the audio thread at the first press); test shadows and analysis decks never need them
-  prealloc() { for (const D of this.decks) { const M = D.mix; M.dfx.prealloc(1, 1, 1); M.pfx.prealloc(1, 1, 1); M.cfx.prealloc(0, 0, 1); M.tfx.prealloc(0, 1, 0); } return this; }
+  prealloc() { for (const D of this.decks) { const M = D.mix; M.dfx.prealloc(1, 1, 1); M.pfx.prealloc(1, 1, 1); M.cfx.prealloc(0, 0, 1); M.tfx.prealloc(0, 1, 0); M.mangle.prealloc(); } return this; }
   // a deck plays a drum family whose one-shots are not here yet: ask once (the page renders it in the analysis worker); its synthesized voices play meanwhile
   wantBank(D) { const B = D.bankP; if (B.missing() && !this.bankAsked.has(B.fam)) { this.bankAsked.add(B.fam); this.outbox.push({ type: 'needBank', family: B.fam, sr: this.sr }); } }
   setEco(on) { on = on | 0; if (on === this.eco) return; const prev = this.eco; this.eco = on; ECO.level = on; for (const D of this.decks) D.mix.setEco(on ? 1 : 0); this.outbox.push({ type: 'eco', on, level: on, prev }); }

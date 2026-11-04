@@ -6,6 +6,7 @@
    (spec → derived contract + plan options → composeTrack) → score. exportSpec(score) writes any score back as a spec,
    and compile(export(score)) reproduces the same events (tested for every genre). */
 const SPEC_VERSION = 1;
+const DRUM_LANE_P = { swing: [0, 1], nudge: [-1, 1], chance: [0, 1], human: [0, 1] }; // (v9.5) drums.lanes.<lane>: swing (its odd 16ths later, up to 1/3 step), nudge (all of it earlier or later, up to 1/4 step), chance (each hit plays with this probability), human (timing and level wander)
 const SPEC_LANES = { kick: 'k', snare: 's', rim: 'rim', closed: 'hc', open: 'ho', ride: 'ride', shaker: 'sh' };
 const SPEC_LANE_OF = { k: 'kick', s: 'snare', rim: 'rim', hc: 'closed', ho: 'open', ride: 'ride', sh: 'shaker' };
 const SPEC_SECTIONS = ['intro', 'groove', 'break', 'build', 'drop', 'outro'];
@@ -17,7 +18,7 @@ const KEY_PC = { C: 0, 'C#': 1, Db: 1, D: 2, 'D#': 3, Eb: 3, E: 4, F: 5, 'F#': 6
 const NOTE_RE = /^([A-G])(#|b)?(-?\d)$/;
 function noteToMidi(tok) { const m = NOTE_RE.exec(tok); if (!m) return null; return 12 * (+m[3] + 1) + KEY_PC[m[1]] + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0); }
 function midiToNote(m, names) { return (names || PC_NAMES)[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1); }
-const LANE_RE = /^[.Xxog]+$/, HAT_RE = /^[.Xxogrzq]+$/, BASS_RE = /^[.\-ROFTSANProftsanp]+$/;
+const LANE_RE = /^[.Xxog]+$/, DRUM_RE = /^[.Xxog234?f]+$/, HAT_RE = /^[.Xxogrzq234?f]+$/, BASS_RE = /^[.\-ROFTSANProftsanp]+$/;
 
 // melody text: bars split by '|', 16 space-separated tokens per bar: C#5 / Eb4 note · '-' hold · '.' rest · 'E5:6' explicit
 // length in 16ths · '!E5' accent · '~E5' slide (legato glide into the note). Returns { bars: [[{s, m, len, acc, slide}]], errors }
@@ -50,8 +51,9 @@ function validateSpec(spec) {
   const E = [], W = []; const err = (path, msg, hint) => E.push({ path, msg, hint }), warn = (path, msg, hint) => W.push({ path, msg, hint });
   const isObj = (x) => x && typeof x === 'object' && !Array.isArray(x), isNum = (x) => typeof x === 'number' && isFinite(x);
   if (!isObj(spec)) { err('', 'the score must be a JSON object', '{"forge":1,"genre":"tech-house"}'); return { ok: false, errors: E, warnings: W }; }
-  const known = ['forge', 'title', 'genre', 'mood', 'seed', 'variation', 'melodySeed', 'seeds', 'complexity', 'bpm', 'key', 'mode', 'swing', 'harmony', 'form', 'drums', 'bass', 'chords', 'lead', 'sound', 'mix', 'notes', 'length', 'ext'];
+  const known = ['forge', 'title', 'genre', 'mood', 'seed', 'variation', 'melodySeed', 'seeds', 'complexity', 'bpm', 'key', 'mode', 'swing', 'harmony', 'form', 'drums', 'bass', 'chords', 'lead', 'sound', 'mix', 'notes', 'length', 'ext', 'fx'];
   for (const k of Object.keys(spec)) if (!known.includes(k)) warn(k, 'unknown field — ignored', 'fields: ' + known.join(', '));
+  if (spec.fx != null && (!isObj(spec.fx) || (spec.fx.mangle != null && !isObj(spec.fx.mangle)))) err('fx', 'must be an object; fx.mangle: the Mangle unit kept in the track', '{"mangle": {"target": -1, "morph": 0.5, "wet": 1, "s": [{"on": true, "mode": "slice", "sub": 1, "macro": 0.5}]}}'); /* (v9.5) */
   if (spec.forge !== SPEC_VERSION) err('forge', `must be ${SPEC_VERSION}`, '"forge": 1');
   const G = GENRE_BY_ID[spec.genre]; if (!G) err('genre', `unknown genre "${spec.genre}"`, 'one of: ' + GENRES.map((g) => g.id).join(', '));
   for (const k of ['seed', 'variation', 'melodySeed']) if (spec[k] != null && !(Number.isInteger(spec[k]) && spec[k] >= 0)) err(k, 'must be a non-negative integer');
@@ -78,13 +80,15 @@ function validateSpec(spec) {
       else for (const [name, pat] of Object.entries(D.patterns)) { drumNames.add(name); const base = `drums.patterns.${name}`; if (!isObj(pat)) { err(base, 'must be an object of lanes'); continue; }
         for (const [ln, v] of Object.entries(pat)) { const path = `${base}.${ln}`;
           if (ln === 'perc') { if (!Array.isArray(v)) { err(path, 'must be an array', '[{"kind":"conga","steps":"..x..x.x..x...x."}]'); continue; }
-            v.forEach((pc, i) => { if (!isObj(pc) || !(PERC_KINDS.hasOwnProperty(pc.kind) || pc.kind === 'rim')) err(`${path}[${i}].kind`, `unknown percussion "${pc && pc.kind}"`, 'one of: rim, ' + Object.keys(PERC_KINDS).join(', ')); laneCheck(`${path}[${i}].steps`, pc && pc.steps, LANE_RE); }); continue; }
+            v.forEach((pc, i) => { if (!isObj(pc) || !(PERC_KINDS.hasOwnProperty(pc.kind) || pc.kind === 'rim')) err(`${path}[${i}].kind`, `unknown percussion "${pc && pc.kind}"`, 'one of: rim, ' + Object.keys(PERC_KINDS).join(', ')); laneCheck(`${path}[${i}].steps`, pc && pc.steps, DRUM_RE); }); continue; }
           if (!SPEC_LANES[ln]) { err(path, `unknown lane "${ln}"`, 'lanes: ' + Object.keys(SPEC_LANES).join(', ') + ', perc'); continue; }
-          laneCheck(path, v, ln === 'closed' || ln === 'open' || ln === 'ride' || ln === 'shaker' ? HAT_RE : LANE_RE); } } }
+          laneCheck(path, v, ln === 'closed' || ln === 'open' || ln === 'ride' || ln === 'shaker' ? HAT_RE : DRUM_RE); } } }
+    if (D.lanes != null) { if (!isObj(D.lanes)) err('drums.lanes', 'must be an object of lanes', '{"snare":{"nudge":0.3},"closed":{"swing":0.4,"human":0.5}}'); else for (const [ln, o] of Object.entries(D.lanes)) { const path = `drums.lanes.${ln}`; if (!SPEC_LANES[ln] && ln !== 'perc') { err(path, `unknown lane "${ln}"`, 'lanes: ' + Object.keys(SPEC_LANES).join(', ') + ', perc'); continue; } if (!isObj(o)) { err(path, 'must be an object', '{"swing":0.3,"nudge":-0.2,"chance":0.9,"human":0.4}'); continue; }
+      for (const [k, x] of Object.entries(o)) { const R = DRUM_LANE_P[k]; if (!R) err(`${path}.${k}`, `unknown setting "${k}"`, 'swing 0…1 · nudge −1…1 (a quarter step) · chance 0…1 · human 0…1'); else if (!isNum(x) || x < R[0] || x > R[1]) err(`${path}.${k}`, `must be ${R[0]}…${R[1]}`); } } } /* (v9.5) each lane's own feel */
     if (D.vary != null && (!isNum(D.vary) || D.vary < 0 || D.vary > 1)) err('drums.vary', 'must be 0…1', '0 = play the patterns exactly as written; 0.5 = the genre default');
     if (D.fill != null && D.fill !== false) { if (!Array.isArray(D.fill)) err('drums.fill', 'must be an array of 16-step strings or false'); else D.fill.forEach((f, i) => laneCheck(`drums.fill[${i}]`, f, HAT_RE, true)); } } }
   function laneCheck(path, v, re, oneBar) { if (typeof v !== 'string') { err(path, 'must be a string of steps', '"X...X...X...X..." — X x o g = loud → ghost, . = rest'); return; }
-    const s = v.replace(/\s|\|/g, ''); if (!re.test(s)) err(path, `illegal character in "${v}"`, re === BASS_RE ? 'bass tokens: R root, O octave, F fifth, T third, S seventh, A approach, N next root, P passing, lowercase = slide, - hold, . rest' : 'X x o g hits (loud → ghost), . rest' + (re === HAT_RE ? ', r z q = 2/3/4-hit rolls' : ''));
+    const s = v.replace(/\s|\|/g, ''); if (!re.test(s)) err(path, `illegal character in "${v}"`, re === BASS_RE ? 'bass tokens: R root, O octave, F fifth, T third, S seventh, A approach, N next root, P passing, lowercase = slide, - hold, . rest' : 'X x o g hits (loud → ghost), . rest' + (re !== LANE_RE ? ', 2 3 4 ratchets (2/3/4 hits in the step), ? a hit on about half the bars, f flam' : '') + (re === HAT_RE ? ', r z q = 2/3/4-hit rolls' : ''));
     else if (s.length % 16 !== 0 || (oneBar && s.length !== 16)) err(path, `${s.length} steps — ${oneBar ? 'must be exactly 16' : 'must be 16 per bar (16, 32, 48 or 64)'}`, 'spaces and | inside the string are ignored, use them to group beats'); else if (s.length > 64) err(path, 'at most 4 bars (64 steps)'); }
   // bass
   const bassNames = new Set(); const B = spec.bass; if (B != null) { if (!isObj(B)) err('bass', 'must be an object'); else {
@@ -163,7 +167,7 @@ function deriveContract(spec) {
   const H = spec.harmony || {}; if (H.barsPerChord && H.barsPerChord !== G.harm.hr) { G.harm.hr = H.barsPerChord; delete G.harm.breakHr; } if (H.breakBarsPerChord) G.harm.breakHr = H.breakBarsPerChord; if (H.extension) G.harm.ext = H.extension;
   const D = spec.drums || {}; if (D.patterns) { G.userDrums = true; G.drums.main = Object.entries(D.patterns).map(([name, p]) => { names.drums.push(name); const v = {};
       for (const [ln, x] of Object.entries(p)) { if (ln === 'perc') v.p = x.map((pc) => [pc.kind, pc.note || 0, pc.steps.replace(/\s|\|/g, '')]); else v[SPEC_LANES[ln]] = x.replace(/\s|\|/g, ''); } return v; }); }
-  if (D.vary != null) G.drums.vary = D.vary; if (D.fill === false) G.drums.fill = null; else if (Array.isArray(D.fill)) G.drums.fill = D.fill.slice();
+  if (D.vary != null) G.drums.vary = D.vary; if (D.lanes) G.drums.lanes = JSON.parse(JSON.stringify(D.lanes)); if (D.fill === false) G.drums.fill = null; else if (Array.isArray(D.fill)) G.drums.fill = D.fill.slice();
   const B = spec.bass || {}; if (B.patterns) G.bass.pats = Object.entries(B.patterns).map(([name, n]) => { names.bass.push(name); return { n: n.replace(/\s|\|/g, '') }; }); if (B.gate != null) G.bass.gate = B.gate; if (B.vary != null) G.bass.vary = B.vary;
   for (const part of ['chords', 'lead']) { const P = spec[part]; if (!P) continue; if (!G[part] && part === 'lead' && P.role !== 'none') G.lead = { role: 'hook', kit: { model: 'lead', voices: 2, detune: 0.3, cut: 3200, res: 0.15, envAmt: 0.8, fDec: 0.2, aAtk: 0.004, aDec: 0.2, aSus: 0.6, aRel: 0.12, gain: 0.36 }, range: [64, 84], rhythm: ['x..x..x.x.......'] };
     if (!G[part]) continue; for (const k of ['role', 'rhythm', 'range', 'gate', 'len', 'sparse', 'voices']) if (P[k] != null) G[part][k] = Array.isArray(P[k]) ? P[k].map((x) => (typeof x === 'string' ? x.replace(/\s|\|/g, '') : x)) : P[k];
@@ -267,7 +271,7 @@ function exportSpec(score, opt) {
   if (m.leadSeed != null) spec.melodySeed = m.leadSeed; if (m.seeds) spec.seeds = Object.assign({}, m.seeds);
   Object.assign(spec, { bpm: m.bpm, key: spellFor(m.key, m.mode)[m.key], mode: m.mode, swing: G.swing, harmony: { progression: m.prog.slice(), barsPerChord: G.harm.hr, extension: G.harm.ext } }); if (G.harm.breakHr) spec.harmony.breakBarsPerChord = G.harm.breakHr;
   const dn = G.drums.main.map((_, i) => String.fromCharCode(65 + i)), bn = G.bass.pats.map((_, i) => String.fromCharCode(65 + i));
-  spec.drums = { patterns: {}, fill: G.drums.fill ? G.drums.fill.slice() : false, vary: G.drums.vary != null ? G.drums.vary : 0.5 };
+  spec.drums = { patterns: {}, fill: G.drums.fill ? G.drums.fill.slice() : false, vary: G.drums.vary != null ? G.drums.vary : 0.5 }; if (G.drums.lanes) spec.drums.lanes = JSON.parse(JSON.stringify(G.drums.lanes));
   G.drums.main.forEach((v, i) => { const p = {}; for (const [k, x] of Object.entries(v)) { if (k === 'p') p.perc = x.map(([kind, note, steps]) => (note ? { kind, note, steps } : { kind, steps })); else if (SPEC_LANE_OF[k]) p[SPEC_LANE_OF[k]] = x; } spec.drums.patterns[dn[i]] = p; });
   spec.bass = { patterns: {}, gate: G.bass.gate, vary: G.bass.vary != null ? G.bass.vary : 0.4 }; G.bass.pats.forEach((p, i) => { spec.bass.patterns[bn[i]] = p.n; });
   spec.chords = { role: G.chords.role }; if (G.chords.rhythm) spec.chords.rhythm = G.chords.rhythm.slice(); if (G.chords.gate) spec.chords.gate = G.chords.gate.slice(); if (G.chords.range) spec.chords.range = G.chords.range.slice(); for (const k of ['len', 'sparse', 'voices']) if (G.chords[k] != null) spec.chords[k] = G.chords[k];

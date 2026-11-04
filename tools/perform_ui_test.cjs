@@ -85,7 +85,24 @@ const OUT = process.argv[2] || '.'; let fails = 0; const ok = (c, m) => { consol
     ok(!!d && d.at % 64 === 0 && d.until - d.at === 32, `transitions: a downlifter starts on the next 4-bar line and lasts 2 bars${d ? ` (step ${d.at}, recipe ${d.rec})` : ''}`);
     await F(() => { window.__sent = []; document.querySelector('[data-rzt="rise"]').click(); document.querySelector('[data-rzb="4"]').click(); document.querySelector('[data-rzgo]').click(); }); await page.waitForTimeout(100);
     const r = await F(() => { const L = window.__sent.filter((x) => x.type === 'at' && x.list && x.list[0].kind === 13); return L.map((m) => ({ at: m.atStep, until: m.list[0].until })); });
-    ok(r.length === 2 && r[0].until % 64 === 0 && r[1].at === r[0].until, `transitions: a 4-bar riser ends on a 4-bar line, an impact lands on it${r.length ? ` (${JSON.stringify(r)})` : ''}`); await F(() => window.__forge.shell.go('play')); }
+    ok(r.length === 2 && r[0].until % 64 === 0 && r[1].at === r[0].until, `transitions: a 4-bar riser ends on a 4-bar line, an impact lands on it${r.length ? ` (${JSON.stringify(r)})` : ''}`); }
+  // (v9.5) MANGLE: an engine and a choice switched on, the touch pad playing slot B while held, a recipe that puts itself on a part,
+  // "Keep in track" writing the state into the track, and the state coming back when that track is loaded again
+  { await F(() => { window.__sent = []; document.querySelector('[data-mgs="0"]').click(); document.querySelector('[data-mgm="spectral"]').click(); }); await page.waitForTimeout(50);
+    await F(() => { document.querySelector('.mg-sub [data-mgc="2"]').click(); document.querySelector('.mg-on').click(); }); await page.waitForTimeout(100);
+    const m = await F(() => window.__sent.filter((x) => x.type === 'mangle' && x.slot === 0).pop()); ok(!!m && m.on === true && m.mode === 2 && m.sub === 2, `Mangle: Spectral · Key on slot A sent to the engine${m ? ` (${JSON.stringify(m)})` : ''}`);
+    await F(() => { window.__sent = []; document.querySelector('[data-mgs="1"]').click(); document.querySelector('[data-mgm="slice"]').click(); }); const pad = await page.$('.mg-pad'); await pad.scrollIntoViewIfNeeded(); const pb = await pad.boundingBox();
+    await page.mouse.move(pb.x + pb.width * 0.8, pb.y + pb.height * 0.2); await page.mouse.down(); await page.waitForTimeout(150); const held = await F(() => window.__sent.filter((x) => x.type === 'mangle' && x.slot === 1).pop());
+    await page.mouse.up(); await page.waitForTimeout(100); const rel = await F(() => window.__sent.filter((x) => x.type === 'mangle' && x.slot === 1).pop());
+    ok(!!held && held.on === true && held.mode === 0 && Math.abs(held.macro - 0.8) < 0.05 && Math.abs(held.a - 0.8) < 0.05 && rel && rel.on === false, `Mangle: the touch pad plays slot B while held (Macro ${held && held.macro}, ${held && held.a}) and lets go on release`);
+    await F(() => { window.__sent = []; const b = [...document.querySelectorAll('[data-mgr]')].find((x) => x.textContent === 'Tuned drums'); b.click(); }); await page.waitForTimeout(100);
+    ok(await F(() => window.__sent.some((x) => x.type === 'mangle' && x.target === 3) && window.__forge.shell.mgOf(0).target === 3), 'Mangle: the "Tuned drums" recipe puts itself on the percussion');
+    await F(() => document.querySelector('[data-mgkeep]').click()); const kept = await F(() => window.__forge.decks[0].spec.fx && window.__forge.decks[0].spec.fx.mangle);
+    ok(!!kept && kept.target === 3 && kept.s[1].mode === 'spectral' && kept.s[0].mode === 'spectral', 'Mangle: Keep in track writes the unit into the track (spec.fx.mangle)');
+    const back = await F(async () => { const W = window.__forge, sp = JSON.parse(JSON.stringify(W.decks[0].spec)); W.shell.mgOf(0).s[0].on = false; W.shell.mgOf(0).s[0].mode = 'fold'; window.__sent = []; const s = W.compileSpec(sp, { fastLevels: true }); W.installScore(0, s, { play: false });
+      const G = W.shell.mgOf(0); return { mode: G.s[0].mode, on: G.s[0].on, target: G.target, sent: window.__sent.some((x) => x.type === 'mangle' && x.slot === 0 && x.on === true && x.mode === 2) }; });
+    ok(back.mode === 'spectral' && back.on === true && back.target === 3 && back.sent, `Mangle: loading the track again brings its Mangle back and switches it on (${JSON.stringify(back)})`);
+    await F(() => { document.querySelector('[data-mgoff]').click(); window.__forge.shell.go('play'); }); }
   await F(() => { window.__forge.shell.SHELL.fxDeck = 0; document.querySelector('[data-osthrow="8"]').click(); }); await page.waitForTimeout(100); ok(await F(() => window.__sent.some((m) => m.type === 'throw' && m.deck === 0)), 'ECHO THROW one-shot on the FX screen');
   await F(() => window.__forge.perf.setPerform(false)); await page.waitForTimeout(300); await page.click('[data-tab="chords"]'); await page.waitForTimeout(300);
   await page.click('[data-crh="..x..x....x..x.."]'); await page.waitForTimeout(400);

@@ -39,6 +39,7 @@ function buildShell() { const app = $('.app'), con = $('.console'); if (!app || 
   if (mixer) into('mix').appendChild(mixer); con.remove(); const ds = document.createElement('section'); ds.className = 'decksound'; into('mix').appendChild(ds); buildDeckSound(ds);
   // FX: the Beat FX, then the performance pads (moved out of the decks)
   const fx = document.createElement('div'); fx.className = 'bfx'; fx.setAttribute('aria-label', 'Beat FX'); into('fx').appendChild(fx); buildBeatFx(fx);
+  const mg = document.createElement('div'); mg.className = 'mangle'; into('fx').appendChild(mg); buildMangle(mg);
   const rz = document.createElement('div'); rz.className = 'risers'; into('fx').appendChild(rz); buildRisers(rz);
   const os = document.createElement('div'); os.className = 'oneshots'; into('fx').appendChild(os); buildOneShots(os);
   const pads = document.createElement('div'); pads.className = 'fx-pads'; into('fx').appendChild(pads); for (const p of $$('.perf')) pads.appendChild(p);
@@ -70,7 +71,7 @@ function buildBeatFx(el) {
       <div class="bfx-side"><label class="lbl" for="bfxDepth">Depth</label><input id="bfxDepth" class="bfx-depth" type="range" min="0" max="1" step="0.01" aria-label="Depth">
         <button class="bfx-q" aria-pressed="true" title="Switch on the next beat">Quantize</button><button class="bfx-on big" aria-pressed="false">FX ON</button></div></div>
     <div class="bfx-params"></div>`;
-  $$('[data-bd]', el).forEach((b) => b.onclick = () => { SHELL.fxDeck = +b.dataset.bd; renderBeatFx(); $$('.os-d').forEach((d) => { d.textContent = 'AB'[SHELL.fxDeck]; }); renderRisers(); });
+  $$('[data-bd]', el).forEach((b) => b.onclick = () => { SHELL.fxDeck = +b.dataset.bd; renderBeatFx(); $$('.os-d').forEach((d) => { d.textContent = 'AB'[SHELL.fxDeck]; }); renderRisers(); renderMangle(); });
   $('.bfx-target', el).onchange = (e) => bfxTarget(SHELL.fxDeck, +e.target.value);
   $$('[data-fx]', el).forEach((b) => b.onclick = () => { bfxOf(SHELL.fxDeck).sel = b.dataset.fx; renderBeatFx(); });
   $$('[data-beat]', el).forEach((b) => b.onclick = () => { const i = SHELL.fxDeck, B = bfxOf(i), F = B.fx[B.sel]; F.beat = +b.dataset.beat; if (F.on) bfxSend(i, B.sel, 'now'); renderBeatFx(); });

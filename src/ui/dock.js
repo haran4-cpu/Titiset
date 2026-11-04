@@ -43,7 +43,7 @@ const groupBars = (s) => (s.length > 16 ? s.match(/.{16}/g).join('|') : s);
 // ---------------------------------------------------------------- spec ⇄ deck
 function deckSpec(score) { // the editable spec of a score: complete (every pattern written out), melodies only where authored
   const sp = exportSpec(score, { melody: false }), o = score.spec;
-  if (o) { if (o.form) o.form.forEach((f, k) => { if (f && f.melody && sp.form[k]) sp.form[k].melody = f.melody; }); if (o.notes) sp.notes = o.notes; if (o.title) sp.title = o.title; if (o.mood) sp.mood = o.mood; } // mood stays as the label of what was asked for (the written harmony it chose still plays)
+  if (o) { if (o.form) o.form.forEach((f, k) => { if (f && f.melody && sp.form[k]) sp.form[k].melody = f.melody; }); if (o.notes) sp.notes = o.notes; if (o.title) sp.title = o.title; if (o.mood) sp.mood = o.mood; if (o.fx) sp.fx = o.fx; } // mood stays as the label of what was asked for (the written harmony it chose still plays)
   return sp; }
 function installScore(i, s, opt) { // a freshly composed / compiled score becomes the deck's track (loaded, not swapped)
   opt = opt || {}; const D = decks[i], other = decks[i ^ 1], otherLive = other.playing && other.score;
@@ -53,7 +53,7 @@ function installScore(i, s, opt) { // a freshly composed / compiled score become
   D.bpm = bpm || s.meta.bpm; D.loading = null; // (v9.2) the tempo it will play at, at once (the box showed the last track's tempo until the analysis, 5–9 s later)
   D.mute.fill(false); D.trim = null; D.trimNA = false; renderDeckHead(i); renderStems(i); analyse(i, s); if (s.levelPending) refineInWorker(i, s); // palette levels: exact match from the worker
   if (play) toast(`${s.meta.name} — ${PCN[s.meta.key]} ${s.meta.mode}, ${s.meta.bpm} BPM`); else if (otherLive) toast(`${s.meta.name} cued on deck ${'AB'[i]} — synced to ${other.bpm.toFixed(1)} BPM`);
-  DOCK.deck = i; DOCK.dpat = DOCK.bpat = null; DOCK.dpage = DOCK.bpage = 0; DOCK.secPin = -1; DOCK.scoreDirty = false; DOCK.melDirty = false; renderDock(); return s; }
+  DOCK.deck = i; DOCK.dpat = DOCK.bpat = null; DOCK.dpage = DOCK.bpage = 0; DOCK.secPin = -1; DOCK.scoreDirty = false; DOCK.melDirty = false; renderDock(); mgFromTrack(i, s); return s; }
 // validate → compile → swap on the next bar (q bars). Returns the new score or null (errors shown in the dock).
 let commitT = [0, 0];
 function commitSoon(i, q, ms) { clearTimeout(commitT[i]); commitT[i] = setTimeout(() => commitSpec(i, { q }), ms == null ? 140 : ms); }

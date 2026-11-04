@@ -566,3 +566,19 @@ body.shell { height: 100vh; height: 100dvh; overflow: hidden; padding-bottom: 0 
 .rz-go { display: flex; gap: 8px; align-items: center; }
 .rz-info { font: 500 12px var(--f-data); color: var(--dim); }
 .rz-r { max-height: 132px; overflow: auto; }
+
+/* (v9.5) MANGLE */
+.mangle { display: grid; gap: 8px; margin-bottom: 14px; }
+.mg-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.mg-head .mg-on { margin-left: auto; min-width: 104px; }
+.mg-led { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-left: 4px; background: var(--line2); vertical-align: middle; } .mg-led.lit { background: var(--a); box-shadow: 0 0 6px var(--a); }
+.mg-desc { margin: 0; font: 500 12px var(--f-data); color: var(--dim); min-height: 1.3em; }
+.mg-play { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; align-items: stretch; }
+.mg-pad { height: 180px; }
+.mg-knobs, .mg-mix { display: grid; gap: 6px; align-content: start; }
+.mg-mix { grid-template-columns: 1fr 1fr; }
+.mg-k { display: grid; gap: 2px; } .mg-k input { width: 100%; }
+.mg-macro .lbl { color: var(--a); }
+.mg-rec { max-height: 104px; overflow: auto; }
+@media (max-width: 560px) { .mg-play { grid-template-columns: 1fr; } .mg-pad { height: 150px; } }
+.mg-hold { justify-self: start; min-height: 0; padding: 6px 16px; }

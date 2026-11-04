@@ -222,6 +222,7 @@ function harmArt(P, bar, cseed) { const si = P.sections.findIndex((x) => bar >= 
   const calm = sec.type === 'intro' || sec.type === 'break' || sec.type === 'outro'; return start && calm && v < 0.3 && chordRunBars(P, sec, 0) >= 2 ? 8 : v < 0.65 ? 2 : 3; }
 function chordHoldSteps(P, sec, b) { const run = chordRunBars(P, sec, b); return Math.max(1, run * 16 - (sec.type === 'build' && b + run >= sec.bars ? (sec.bx ? sec.bx.gap : DROP_GAP) : sec.dx === 'gap' && b + run >= sec.bars ? DROP_GAP : 0)) - 0.25; }
 // multi-bar lane strings: a lane of 32/48/64 steps plays its bars in turn (variation inside a pattern, Elektron-style)
+const HAT_LANE = { hc: 'closed', ho: 'open', ride: 'ride', sh: 'shaker' };
 function laneBar(str, b) { if (!str || str.length <= 16) return str; const n = Math.floor(str.length / 16); const k = ((b % n) + n) % n; return str.slice(k * 16, k * 16 + 16); }
 function chordPc(P, c) { return (P.key + c.root) % 12; }
 function chordIvs(P, c) { return extendChord(c, P.G.harm.ext, MODES[P.mode]); }
@@ -554,6 +555,20 @@ function composeTrack(gid, seed, o) {
   const FEEL = G.feel || FEEL_FAM[G.family] || {}, fS = FEEL.snare || 0, fH = FEEL.hats || 0, fP = FEEL.perc || 0, fC = FEEL.chords || 0;
   const swingOff = Math.max(0, (G.swing - 50) / 50) * 2 * 0.5; // MPC swing: odd 16th of each 8th pair lands at S*2 steps → offset = 2S-1
   const sw = (step) => (step & 1 ? swingOff : 0);
+  // (v9.5) drum hits: X x o g (loud → ghost) · 2 3 4 a ratchet (that many hits inside the step) · ? a hit on about half the bars
+  // (decided per bar, the same on every render) · f a flam (a soft grace hit just before) · r z q hat rolls (as 2 3 4); and each
+  // lane's own feel (drums.lanes: swing, nudge, chance, human) — all deterministic, outside the random streams
+  const LNP = G.drums.lanes || {}, HIT_N = { 2: 2, r: 2, 3: 3, z: 3, 4: 4, q: 4 };
+  const hits = (str, lane, bar) => { const out = []; if (!str) return out; const lp = LNP[lane], key = P.seed + '/' + lane + '/' + bar;
+    for (let i = 0; i < str.length; i++) { const c = str[i]; if (c === '.' || c === '-' || c === ' ') continue;
+      if (lp && lp.chance != null && lp.chance < 1 && (hashStr(key + '/c' + i) % 1000) / 1000 >= lp.chance) continue;
+      let sh = 0, hv = 1; if (lp) { if (lp.swing && (i & 1)) sh += lp.swing * 0.33; if (lp.nudge) sh += lp.nudge * 0.25; if (lp.human) { const h = hashStr(key + '/h' + i); sh += ((h % 1000) / 1000 - 0.5) * 0.08 * lp.human; hv = 1 + (((h >>> 10) % 1000) / 1000 - 0.5) * 0.45 * lp.human; } }
+      const n = HIT_N[c] || 1;
+      if (c === '?') { if (hashStr(key + '/q' + i) % 2) out.push({ step: i, off: sh, vel: 0.75 * hv }); }
+      else if (c === 'f') { out.push({ step: i, off: sh - 0.16, vel: 0.4 * hv }); out.push({ step: i, off: sh, vel: 0.88 * hv }); }
+      else if (n > 1) for (let k = 0; k < n; k++) out.push({ step: i, off: sh + k / n, vel: (0.5 + 0.4 * k / (n - 1)) * hv });
+      else out.push({ step: i, off: sh, vel: (VEL[c] || 0.85) * hv }); }
+    return out; };
   const rSk = sd('drums', 41, 43), allowS = new Set(); for (const m of G.drums.main) if (m.s) for (let i = 0; i < m.s.length; i++) if (m.s[i] !== '.' && m.s[i] !== '-') allowS.add(i % 16); const MAINS = G.userDrums ? G.drums.main : G.drums.main.map((v) => skeletonize(v, rSk, G.drums.main[0].k === 'X...X...X...X...', G.family, allowS)); // (patterns a person wrote, or saved in a set, are played as written) // this track's drum skeleton (drawn from the drums seed)
   const cseed = SD.chords != null ? SD.chords >>> 0 : vs, artC = new Map(), art = (bar) => { if (!artC.has(bar)) artC.set(bar, harmArt(P, bar, cseed)); return artC.get(bar); }, swA = (off) => off + sw((off + 16) & 15); // swA: an articulated start, swung like any other 16th
   // a sustained chord from bar b: its start offset, and its length up to where the next chord really starts (pushed or late)
@@ -660,8 +675,8 @@ function composeTrack(gid, seed, o) {
             if (sec.type === 'build') kind = 'rise';
             const at = EAR_AT[Math.floor(u3 * EAR_AT.length)], len = EAR_LEN[kind] || 2;
             if (at + len <= silentFrom && !(kickMute && at >= 12)) S.push(t0 + at + sw(at), CH.fx, FX_KIND[kind], 0.55 + 0.35 * u3, len, 0, note, (bar % 2 ? 0.65 : -0.65) * (0.6 + 0.4 * u)); } } }
-      if (kickOn && vari.k) for (const e of parsePat(laneBar(vari.k, b))) { if (e.step >= silentFrom || (edit && e.step >= 12) || (kickMute && e.step >= 12)) continue; if (lastOfPhrase && !isLastSec && G.drums.fill && e.step >= 14 && next && next.type !== 'outro' && rd() < 0.5 && b === sec.bars - 1) continue;
-        S.push(t0 + e.step + sw(e.step), CH.kick, 0, e.vel, 1, 0, 0); }
+      if (kickOn && vari.k) for (const e of hits(laneBar(vari.k, b), 'kick', bar)) { if (e.step >= silentFrom || (edit && e.step >= 12) || (kickMute && e.step >= 12)) continue; if (lastOfPhrase && !isLastSec && G.drums.fill && e.step >= 14 && next && next.type !== 'outro' && rd() < 0.5 && b === sec.bars - 1) continue;
+        S.push(t0 + e.step + e.off + sw(e.step), CH.kick, 0, e.vel, 1, 0, 0); }
       // snare / clap lane (+ rim lane) — build replaces it with an accelerating roll
       const rollBar = shape === 'lateroll' ? b >= sec.bars - lateN : shape === 'half' || shape === 'tom' ? b === sec.bars - 1 : shape === 'kickroll' ? false : true;
       if (sec.type === 'build' && L.snare && rollBar) { const rp = shape === 'lateroll' ? (b - (sec.bars - lateN) + 0.5) / lateN : shape === 'half' || shape === 'tom' ? 0.8 : buildPos;
@@ -674,22 +689,20 @@ function composeTrack(gid, seed, o) {
         const fillPat = lastOfPhrase && G.drums.fill && (b === sec.bars - 1 || phraseBar === 7) && sec.type !== 'intro' ? pick(rd, G.drums.fill) : null;
         const fillStart = fillPat ? fillPat.search(/[^.]/) : 99;
         if (edit && !fillPat) for (const e of parsePat(edit[1])) S.push(t0 + 12 + e.step + sw(12 + e.step), CH.snare, 3, e.vel * (0.95 + rh() * 0.1), 1, 0, 0);
-        for (const e of parsePat(laneBar(vari.s, b))) if (e.step < fillStart && e.step < silentFrom && !(edit && !fillPat && e.step >= 12)) S.push(t0 + e.step + sw(e.step) + fS + (rh() - 0.5) * 0.02, CH.snare, 3, e.vel * (0.97 + rh() * 0.06), 1, 0, 0);
-        if (fillPat) for (const e of parsePat(fillPat)) if (e.step < silentFrom) S.push(t0 + e.step + sw(e.step), CH.snare, 3, e.vel * (0.95 + rh() * 0.1), 1, 0, 0);
+        for (const e of hits(laneBar(vari.s, b), 'snare', bar)) if (e.step < fillStart && e.step < silentFrom && !(edit && !fillPat && e.step >= 12)) S.push(t0 + e.step + e.off + sw(e.step) + fS + (rh() - 0.5) * 0.02, CH.snare, 3, e.vel * (0.97 + rh() * 0.06), 1, 0, 0);
+        if (fillPat) for (const e of hits(fillPat, 'snare', bar)) if (e.step < silentFrom) S.push(t0 + e.step + e.off + sw(e.step), CH.snare, 3, e.vel * (0.95 + rh() * 0.1), 1, 0, 0);
       }
       if (sec.dx === 'fill' && b === sec.bars - 1 && !(L.snare && vari.s)) for (const e of parsePat((G.drums.fill || ['............x.xX'])[hashStr(P.seed + '/dxf/' + bar) % (G.drums.fill || [0]).length])) if (e.step < silentFrom) S.push(t0 + e.step + sw(e.step), CH.snare, 3, e.vel * 0.9, 1, 0, 0); // a breakdown straight into its drop: the fill
-      if (L.snare && vari.rim && sec.type !== 'build') for (const e of parsePat(laneBar(vari.rim, b))) if (e.step < silentFrom) S.push(t0 + e.step + sw(e.step) + (rh() - 0.5) * 0.03, CH.snare, 2, e.vel * (0.9 + rh() * 0.2), 1, 0, 0);
+      if (L.snare && vari.rim && sec.type !== 'build') for (const e of hits(laneBar(vari.rim, b), 'rim', bar)) if (e.step < silentFrom) S.push(t0 + e.step + e.off + sw(e.step) + (rh() - 0.5) * 0.03, CH.snare, 2, e.vel * (0.9 + rh() * 0.2), 1, 0, 0);
       // hats: fraction < 1 thins to open hats only (and half the bars at ≤ .3)
       if (L.hats) { const lanes = L.hats >= 1 ? ['hc', 'ho', 'ride', 'sh'] : ['ho'];
         if (!(L.hats <= 0.3 && b % 2)) for (const ln of lanes) { const pat = laneBar(vari[ln], b); if (!pat) continue; const kind = HAT_KIND[ln];
-          for (let i = 0; i < pat.length; i++) { const ch = pat[i]; if (ch === '.' || ch === '-') continue; if (i >= silentFrom) continue;
-            const n = ch === 'r' ? 2 : ch === 'z' ? 3 : ch === 'q' ? 4 : 1, vel = VEL[ch] || 0.7;
-            for (let k = 0; k < n; k++) { const tt = t0 + i + k / n + sw(i) + fH + (rh() - 0.5) * 0.04; const vv = n > 1 ? 0.5 + 0.4 * (k / (n - 1)) : vel * (0.92 + rh() * 0.16);
-              S.push(tt, CH.hats, kind, vv * (L.hats < 1 ? 0.85 : 1), 1, 0, 0, kind === 3 ? 0.45 : kind === 0 ? -0.2 : kind === 1 ? 0.24 : kind === 2 ? -0.38 : 0); } } } }
+          for (const e of hits(pat, HAT_LANE[ln], bar)) { if (e.step >= silentFrom) continue; const tt = t0 + e.step + e.off + sw(e.step) + fH + (rh() - 0.5) * 0.04, vv = (HIT_N[pat[e.step]] || 1) > 1 ? e.vel : e.vel * (0.92 + rh() * 0.16);
+            S.push(tt, CH.hats, kind, vv * (L.hats < 1 ? 0.85 : 1), 1, 0, 0, kind === 3 ? 0.45 : kind === 0 ? -0.2 : kind === 1 ? 0.24 : kind === 2 ? -0.38 : 0); } } }
       // percussion
       if (TOP && (sec.type === 'drop' || sec.layer === 'groove2' || sec.layer === 'tease') && (L.perc || 0) > 0) for (const [kind, pat, vel, pan] of TOP) { const pb = laneBar(pat, b); for (let st = 0; st < 16; st++) if (pb[st] === 'x' && st < silentFrom) S.push(t0 + st + sw(st) + fP, CH.perc, 0, vel * (st % 4 === 0 ? 0.8 : 1) * (0.9 + rh() * 0.15), 1, PERC_KINDS[kind] << 2, 0, pan); } // (v9.4) the top loop
-      if (percOn && vari.p) for (const [kind, note, pat] of vari.p) if (kind !== 'rim') for (const e of parsePat(laneBar(pat, b))) { if (e.step >= silentFrom) continue; S.push(t0 + e.step + sw(e.step) + fP + (rh() - 0.5) * 0.04, CH.perc, note || 0, e.vel * (0.88 + rh() * 0.2), 1, (PERC_KINDS[kind] ?? 1) << 2, 0, PERC_PAN[kind] || 0); }
-      if (vari.p && vari.p.some((p) => p[0] === 'rim') && L.snare) for (const [kind, note, pat] of vari.p) if (kind === 'rim') for (const e of parsePat(laneBar(pat, b))) { if (e.step >= silentFrom) continue; S.push(t0 + e.step + sw(e.step), CH.snare, 2, e.vel * 0.9, 1, 0, 0); }
+      if (percOn && vari.p) for (const [kind, note, pat] of vari.p) if (kind !== 'rim') for (const e of hits(laneBar(pat, b), 'perc', bar)) { if (e.step >= silentFrom) continue; S.push(t0 + e.step + e.off + sw(e.step) + fP + (rh() - 0.5) * 0.04, CH.perc, note || 0, e.vel * (0.88 + rh() * 0.2), 1, (PERC_KINDS[kind] ?? 1) << 2, 0, PERC_PAN[kind] || 0); }
+      if (vari.p && vari.p.some((p) => p[0] === 'rim') && L.snare) for (const [kind, note, pat] of vari.p) if (kind === 'rim') for (const e of hits(laneBar(pat, b), 'rim', bar)) { if (e.step >= silentFrom) continue; S.push(t0 + e.step + e.off + sw(e.step), CH.snare, 2, e.vel * 0.9, 1, 0, 0); }
       // tuned tom fill (v7.1): on some 16-bar phrase ends of drops and grooves the last beat is four toms walking DOWN THROUGH THE
       // CHORD'S OWN TONES (in key, tuned against the kit's pitch) — the electronic tom run, made harmonic. Deterministic per bar.
       if (TOM_FAM.has(G.family) && groovy && b % 16 === 15 && b !== sec.bars - 1 && L.snare && hashStr(P.seed + '/tom' + bar) % 3 === 0) { const tn = []; for (let m = 74; m >= 50; m--) if (pcs.includes(m % 12)) tn.push(m);
