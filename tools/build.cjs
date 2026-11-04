@@ -23,7 +23,7 @@ for (const k of Object.keys(calib)) delete calib[k].check;
 let composer = ['composer.js', 'bank.js', 'bank2.js', 'preset_gain.js', 'part_ref.js', 'model_params.js', 'spec.js', 'mp3_wasm.js', 'mp3.js'].map((f) => fs.readFileSync(path.join(SRC, 'compose', f), 'utf8')).join('\n');
 const BAL_REF_SRC = '\n/* (v9.4) the calibrated channel faders, for the composer (LEAD 2 level) */ const BAL_REF = ' + JSON.stringify(Object.fromEntries(Object.entries(JSON.parse(fs.readFileSync(path.join(SRC, 'engine', 'calibration.json'), 'utf8'))).map(([k, v]) => [k, v.bal]))) + ';\n';
 composer += BAL_REF_SRC;
-const dock = ['dock.js', 'midi.js', 'perform.js', 'auto.js', 'health.js', 'ai_models.js', 'ai.js', 'extend.js', 'shell.js', 'mangle.js'].filter((f) => fs.existsSync(path.join(SRC, 'ui', f))).map((f) => fs.readFileSync(path.join(SRC, 'ui', f), 'utf8')).join('\n');
+const dock = ['dock.js', 'midi.js', 'perform.js', 'auto.js', 'health.js', 'ai_models.js', 'ai.js', 'extend.js', 'shell.js', 'mangle.js', 'drums.js'].filter((f) => fs.existsSync(path.join(SRC, 'ui', f))).map((f) => fs.readFileSync(path.join(SRC, 'ui', f), 'utf8')).join('\n');
 const SONGS = fs.readdirSync(path.join(ROOT, 'songs')).filter((f) => f.endsWith('.json')).sort().map((f) => JSON.parse(fs.readFileSync(path.join(ROOT, 'songs', f), 'utf8')));
 const PROMPT = require('./card.cjs').cardText(require('./load.cjs').load());
 const app = fs.readFileSync(path.join(SRC, 'ui', 'app.js'), 'utf8');

@@ -240,7 +240,7 @@ button { cursor: pointer; }
 .dk-checks li.bad { border-color: var(--crit); } .dk-checks li.warn { border-color: var(--warn); }
 .tile.song .n::after { content: 'SCORE'; font: 600 9px var(--f-data); letter-spacing: .12em; color: var(--faint); margin-left: 6px; vertical-align: 2px; }
 @media (max-width: 900px) { .dk-split, .dk-split.wide { grid-template-columns: 1fr; } .dk-side { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); padding-top: 10px; } .dk-status { display: none; } }
-@media (max-width: 640px) { .dk-bar { flex-wrap: wrap; padding: 6px 12px; gap: 6px; } .dk-tabs { order: 3; flex-basis: 100%; } .dk-ctx { margin-left: auto; } .dk-sec { max-width: 150px; } .dk-now { display: none; } .dk-body { padding: 4px 12px 12px; max-height: 52vh; } .dk-keys { grid-template-columns: repeat(6, minmax(30px, 1fr)); } .dk-row { grid-template-columns: 46px minmax(300px, 1fr) 20px; } }
+@media (max-width: 640px) { .dk-bar { flex-wrap: wrap; padding: 6px 12px; gap: 6px; } .dk-tabs { order: 3; flex-basis: 100%; } .dk-ctx { margin-left: auto; } .dk-sec { max-width: 150px; } .dk-now { display: none; } .dk-body { padding: 4px 12px 12px; max-height: 52vh; } .dk-keys { grid-template-columns: repeat(6, minmax(30px, 1fr)); } .dk-row { grid-template-columns: 46px minmax(0, 1fr) 20px; } }
 
 .energy { width: 110px; accent-color: var(--dc); }
 .evolve { display: inline-flex; gap: 5px; align-items: center; margin-left: 6px; font-size: 12px; color: var(--dim); }
@@ -448,7 +448,7 @@ body.shell { height: 100vh; height: 100dvh; overflow: hidden; padding-bottom: 0 
 .screens::-webkit-scrollbar { display: none; }
 .screen { flex: 0 0 100%; min-width: 0; scroll-snap-align: start; scroll-snap-stop: always; overflow-y: auto; overflow-x: hidden; overscroll-behavior-y: contain; position: relative; }
 .screen + .screen { border-left: 1px solid var(--line); }
-.scr-in { padding: var(--gap) var(--gap) 28px; display: grid; gap: var(--gap); align-content: start; max-width: 1180px; margin-inline: auto; min-height: 100%; }
+.scr-in { padding: var(--gap) var(--gap) 28px; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--gap); align-content: start; max-width: 1180px; margin-inline: auto; min-height: 100%; }
 @media (min-width: 1100px) { .screen { flex-basis: 50%; } }
 .tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; height: calc(var(--tabH) + env(safe-area-inset-bottom, 0px)); padding-bottom: env(safe-area-inset-bottom, 0px); display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); background: var(--panel); border-top: 1px solid var(--line); }
 .tabbar button { min-height: var(--tabH); border: 0; background: none; color: var(--dim); font: 700 13px var(--f-ui); letter-spacing: .12em; text-transform: uppercase; }
@@ -582,3 +582,24 @@ body.shell { height: 100vh; height: 100dvh; overflow: hidden; padding-bottom: 0 
 .mg-rec { max-height: 104px; overflow: auto; }
 @media (max-width: 560px) { .mg-play { grid-template-columns: 1fr; } .mg-pad { height: 150px; } }
 .mg-hold { justify-self: start; min-height: 0; padding: 6px 16px; }
+
+/* (v9.5) drums: brush, ratchet / chance / flam cells, lane tools and feel, the six knobs, the kick designer */
+.dk-c.cr2, .dk-c.cr3, .dk-c.cr4, .dk-legend i.cr2 { background: repeating-linear-gradient(90deg, var(--dc) 0 3px, var(--well) 3px 5px); border-color: transparent; }
+.dk-c.cch { background: color-mix(in srgb, var(--dc) 45%, var(--well)); border: 1px dashed var(--dc); }
+.dk-c.cfl { background: linear-gradient(90deg, color-mix(in srgb, var(--dc) 35%, var(--well)) 0 30%, var(--dc) 30%); border-color: transparent; }
+.dk-c { font: 600 10px var(--f-data); color: var(--text); line-height: 1; }
+.dk-brush { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; } .dk-brush button { display: inline-flex; gap: 5px; align-items: center; font: 500 12px var(--f-data); padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--well); color: var(--dim); } .dk-brush button.on { border-color: var(--a); color: var(--text); }
+.dk-brush i.dk-c { display: inline-grid; place-items: center; width: 16px; height: 16px; font-style: normal; }
+.dk-row.lsel { outline: 1px solid var(--line2); border-radius: 4px; }
+.dk-lsel { width: 26px; padding: 0; border: 1px solid var(--line); border-radius: 4px; background: var(--well); color: var(--dim); } .dk-lsel.on { color: var(--a); border-color: var(--a); }
+.dk-lanebar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; } .dk-lanebar .btn { padding: 4px 10px; }
+.dk-lanefeel { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px 12px; margin-top: 6px; } .dk-lanefeel input { width: 100%; }
+.dk-more { margin: 2px 0 10px; } .dk-more > summary { cursor: pointer; font: 500 12px var(--f-data); color: var(--dim); padding: 4px 0; }
+.dk-keytrack { margin: 4px 0; } .dk-keytrack.on { border-color: var(--a); color: var(--a); }
+
+/* (v9.5) the editor follows its own width (two screens side by side on a wide window give it half): one column under 900 px */
+.screen { container-type: inline-size; }
+@container (max-width: 900px) { .dk-split, .dk-split.wide { grid-template-columns: 1fr; } .dk-side { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); padding-top: 10px; } }
+@container (max-width: 700px) { .dk-row { grid-template-columns: 74px minmax(0, 1fr) 22px; gap: 6px; } .dk-bar { flex-wrap: wrap; gap: 6px; } .dk-tabs { order: 3; flex-basis: 100%; } .dk-ctx { margin-left: auto; } .dk-now { display: none; } }
+@container (max-width: 480px) { .dk-row { grid-template-columns: 46px minmax(0, 1fr) 20px; } }
+.dk-c.ac.on { background: var(--dc); border-color: var(--dc); }

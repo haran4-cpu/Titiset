@@ -93,6 +93,7 @@ function validateSpec(spec) {
   // bass
   const bassNames = new Set(); const B = spec.bass; if (B != null) { if (!isObj(B)) err('bass', 'must be an object'); else {
     if (B.patterns != null) { if (!isObj(B.patterns) || !Object.keys(B.patterns).length) err('bass.patterns', 'must be an object of named patterns', '{"A":"..R..R.R..R..RO."}'); else for (const [name, v] of Object.entries(B.patterns)) { bassNames.add(name); laneCheck(`bass.patterns.${name}`, v, BASS_RE); } }
+    if (B.accents != null) { if (!isObj(B.accents)) err('bass.accents', 'must be an object: a pattern name → its accent steps', '{"A":"x...x...x...x..."}'); else for (const [name, a] of Object.entries(B.accents)) { const path = `bass.accents.${name}`; if (!bassNames.has(name)) err(path, `pattern "${name}" is not defined`, 'an accent lane belongs to a bass pattern of the same name'); else if (typeof a !== 'string' || !/^[.x]+$/.test(a.replace(/\s|\|/g, ''))) err(path, 'a string of x (accent) and . (none)', '"x...x...x...x..."'); else if (a.replace(/\s|\|/g, '').length !== B.patterns[name].replace(/\s|\|/g, '').length) err(path, 'as long as its pattern'); } } /* (v9.5) */
     if (B.gate != null && (!isNum(B.gate) || B.gate < 0.2 || B.gate > 1)) err('bass.gate', 'must be 0.2…1');
     if (B.vary != null && (!isNum(B.vary) || B.vary < 0 || B.vary > 1)) err('bass.vary', 'must be 0…1', '0 = the bass lines exactly as written'); } }
   // chords / lead
@@ -168,7 +169,7 @@ function deriveContract(spec) {
   const D = spec.drums || {}; if (D.patterns) { G.userDrums = true; G.drums.main = Object.entries(D.patterns).map(([name, p]) => { names.drums.push(name); const v = {};
       for (const [ln, x] of Object.entries(p)) { if (ln === 'perc') v.p = x.map((pc) => [pc.kind, pc.note || 0, pc.steps.replace(/\s|\|/g, '')]); else v[SPEC_LANES[ln]] = x.replace(/\s|\|/g, ''); } return v; }); }
   if (D.vary != null) G.drums.vary = D.vary; if (D.lanes) G.drums.lanes = JSON.parse(JSON.stringify(D.lanes)); if (D.fill === false) G.drums.fill = null; else if (Array.isArray(D.fill)) G.drums.fill = D.fill.slice();
-  const B = spec.bass || {}; if (B.patterns) G.bass.pats = Object.entries(B.patterns).map(([name, n]) => { names.bass.push(name); return { n: n.replace(/\s|\|/g, '') }; }); if (B.gate != null) G.bass.gate = B.gate; if (B.vary != null) G.bass.vary = B.vary;
+  const B = spec.bass || {}; if (B.patterns) G.bass.pats = Object.entries(B.patterns).map(([name, n]) => { names.bass.push(name); const o = { n: n.replace(/\s|\|/g, '') }; const a = B.accents && B.accents[name]; if (a) o.acc = a.replace(/\s|\|/g, ''); return o; }); if (B.gate != null) G.bass.gate = B.gate; if (B.vary != null) G.bass.vary = B.vary;
   for (const part of ['chords', 'lead']) { const P = spec[part]; if (!P) continue; if (!G[part] && part === 'lead' && P.role !== 'none') G.lead = { role: 'hook', kit: { model: 'lead', voices: 2, detune: 0.3, cut: 3200, res: 0.15, envAmt: 0.8, fDec: 0.2, aAtk: 0.004, aDec: 0.2, aSus: 0.6, aRel: 0.12, gain: 0.36 }, range: [64, 84], rhythm: ['x..x..x.x.......'] };
     if (!G[part]) continue; for (const k of ['role', 'rhythm', 'range', 'gate', 'len', 'sparse', 'voices']) if (P[k] != null) G[part][k] = Array.isArray(P[k]) ? P[k].map((x) => (typeof x === 'string' ? x.replace(/\s|\|/g, '') : x)) : P[k];
     if (part === 'chords' && G.chords.role === 'gate' && !G.chords.gate) G.chords.gate = ['x.xx.xx.x.xx.xx.'];
@@ -273,7 +274,7 @@ function exportSpec(score, opt) {
   const dn = G.drums.main.map((_, i) => String.fromCharCode(65 + i)), bn = G.bass.pats.map((_, i) => String.fromCharCode(65 + i));
   spec.drums = { patterns: {}, fill: G.drums.fill ? G.drums.fill.slice() : false, vary: G.drums.vary != null ? G.drums.vary : 0.5 }; if (G.drums.lanes) spec.drums.lanes = JSON.parse(JSON.stringify(G.drums.lanes));
   G.drums.main.forEach((v, i) => { const p = {}; for (const [k, x] of Object.entries(v)) { if (k === 'p') p.perc = x.map(([kind, note, steps]) => (note ? { kind, note, steps } : { kind, steps })); else if (SPEC_LANE_OF[k]) p[SPEC_LANE_OF[k]] = x; } spec.drums.patterns[dn[i]] = p; });
-  spec.bass = { patterns: {}, gate: G.bass.gate, vary: G.bass.vary != null ? G.bass.vary : 0.4 }; G.bass.pats.forEach((p, i) => { spec.bass.patterns[bn[i]] = p.n; });
+  spec.bass = { patterns: {}, gate: G.bass.gate, vary: G.bass.vary != null ? G.bass.vary : 0.4 }; G.bass.pats.forEach((p, i) => { spec.bass.patterns[bn[i]] = p.n; if (p.acc && /x/.test(p.acc)) (spec.bass.accents || (spec.bass.accents = {}))[bn[i]] = p.acc; });
   spec.chords = { role: G.chords.role }; if (G.chords.rhythm) spec.chords.rhythm = G.chords.rhythm.slice(); if (G.chords.gate) spec.chords.gate = G.chords.gate.slice(); if (G.chords.range) spec.chords.range = G.chords.range.slice(); for (const k of ['len', 'sparse', 'voices']) if (G.chords[k] != null) spec.chords[k] = G.chords[k];
   if (G.lead) { spec.lead = { role: G.lead.role, range: G.lead.range.slice() }; if (G.lead.rhythm) spec.lead.rhythm = G.lead.rhythm.slice(); } else spec.lead = { role: 'none' };
   const hasTypeDefault = (s) => s.layer === SPEC_DEFAULT_LAYER[s.type];

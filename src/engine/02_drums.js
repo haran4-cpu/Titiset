@@ -54,7 +54,7 @@ class NoiseHitVoice { constructor() { this.on = 0; this.t = 0; this.wait = 0; th
 // snare / clap / rim on one instrument (the clap/snare channel). Envelopes are recursive exponentials (one multiply per sample).
 class Snare {
   constructor(sr) { this.sr = sr; this.v = Array.from({ length: 6 }, () => new NoiseHitVoice()); this.i = 0;
-    this.p = { kind: 'snare', tone: 190, tone2: 330, toneDec: 0.09, toneAmt: 0.55, nDec: 0.16, nHp: 1400, nLp: 8000, snap: 0.5, claps: 3, clapGap: 0.0095, clapF: 1250, clapQ: 1.1, clapTail: 0.18, gain: 1, rimF: 1700, layer: 0 }; shape(this); }
+    this.p = { kind: 'snare', tone: 190, tone2: 330, toneDec: 0.09, toneAmt: 0.55, nDec: 0.16, nHp: 1400, nLp: 8000, snap: 0.5, claps: 3, clapGap: 0.0095, clapF: 1250, clapQ: 1.1, clapTail: 0.18, gain: 1, rimF: 1700, layer: 0, lift: 0 }; shape(this); }
   setKit(k) { Object.assign(this.p, k); }
   // layer (0…1): the other sound of the pair under every hit — a clap under a snare, a snare under a clap — at that level (how a
   // producer stacks a snare: the body and snap of one, the spread of the other)
@@ -68,7 +68,7 @@ class Snare {
   render(L, R, n) {
     const sr = this.sr, P = this.p, inv = 1 / sr, k = (s) => Math.exp(-1 / (s * sr));
     const kB = k(0.0035), kT = k(P.clapTail), gapN = Math.max(1, Math.round(P.clapGap * sr)), kTone = k(P.toneDec), kN = k(P.nDec), kS = k(0.004), kPd = k(0.006), kR1 = k(0.012), kR2 = k(0.0015);
-    const endClap = (P.claps * P.clapGap + P.clapTail * 7) * sr, endSn = Math.max(P.nDec, P.toneDec) * 8 * sr, g = P.gain;
+    const endClap = (P.claps * P.clapGap + P.clapTail * 7) * sr, endSn = Math.max(P.nDec, P.toneDec) * 8 * sr, g = P.gain; const snG = (P.lift || 0) * 1.6, snN = 0.005 * sr; // (v9.5) the uniform Snap
     for (const v of this.v) { if (!v.on) continue;
       for (let i = 0; i < n; i++) { if (v.wait > 0) { v.wait--; continue; }
         const ts = v.t++; let y = 0;
@@ -90,13 +90,14 @@ class Snare {
           y = tanh((body + nz * ne * (1 - P.toneAmt * 0.4)) * 1.4);
           if (ts > endSn) v.on = 0;
         }
+        if (snG && ts < snN) y *= 1 + snG * (1 - ts / snN); /* (v9.5) Snap: any kind's first 5 ms lifted */
         y *= v.vel * g; L[i] += y; R[i] += y; if (!v.on) break; } } }
 }
 // hats: closed / open (choke) / ride / shaker / crash — metal oscillator bank + noise
 class MetalVoice { constructor() { this.on = 0; this.t = 0; this.wait = 0; this.vel = 1; this.ph = new Float64Array(6); this.bp = new Svf(); this.hp = new Svf(); this.hp2 = new Svf(); this.dec = 0.05; this.kind = 0; this.pan = 0; this.gl = 1; this.gr = 1; this.atk = 0; this.e = 1; this.e2 = 1; this.k = 0; this.k2 = 0; shape(this); } }
 class Hats {
   constructor(sr) { this.sr = sr; this.v = Array.from({ length: 8 }, () => new MetalVoice()); this.i = 0;
-    this.p = { base: 410, noise: 0.35, cDec: 0.045, oDec: 0.38, bpF: 10500, hpF: 7200, rideF: 620, rideDec: 1.6, shakF: 8500, shakDec: 0.07, crashDec: 2.2, gain: 1, tone: 0 }; shape(this); }
+    this.p = { base: 410, noise: 0.35, cDec: 0.045, oDec: 0.38, bpF: 10500, hpF: 7200, rideF: 620, rideDec: 1.6, shakF: 8500, shakDec: 0.07, crashDec: 2.2, gain: 1, tone: 0, snap: 0 }; shape(this); }
   setKit(k) { Object.assign(this.p, k); }
   trigger(off, vel, kind, pan) { // kind: 0 closed, 1 open, 2 ride, 3 shaker, 4 crash, 5 pedal
     if (kind === 0 || kind === 5) for (const o of this.v) if (o.on && o.kind === 1 && o.dec > 0.012) { o.dec = 0.012; o.k = Math.exp(-1 / (0.012 * this.sr)); } // choke the open hat
@@ -117,7 +118,7 @@ class Hats {
   // times, the six square oscillators, the envelopes) — bit-identical output — without three calls and ~40 object reads and
   // writes per sample per voice. Measured before: the hats were 10 % of the engine on a psytrance drop.
   render(L, R, n) {
-    const sr = this.sr, P = this.p, inv = 1 / sr, PN = P.noise, PG = P.gain;
+    const sr = this.sr, P = this.p, inv = 1 / sr, PN = P.noise, PG = P.gain, snG = (P.snap || 0) * 1.6, snN = 0.005 * sr; // (v9.5) Snap: the first 5 ms lifted
     for (const v of this.v) { if (!v.on) continue;
       const kind = v.kind, metal = kind !== 3, base = kind === 2 ? P.rideF : kind === 4 ? P.base * 1.3 : P.base, ph = v.ph;
       const i0 = base * HAT_RATIOS[0] * inv, i1 = base * HAT_RATIOS[1] * inv, i2 = base * HAT_RATIOS[2] * inv, i3 = base * HAT_RATIOS[3] * inv, i4 = base * HAT_RATIOS[4] * inv, i5 = base * HAT_RATIOS[5] * inv;
@@ -135,13 +136,14 @@ class Hats {
         const xg = xh - hk * v1 - v2; v3 = xg - g2; v1 = ga1 * g1 + ga2 * v3; v2 = g2 + ga2 * g1 + ga3 * v3; g1 = 2 * v1 - g1; g2 = 2 * v2 - g2; // second high-pass
         let y = xg - gk * v1 - v2;
         let e = ev; ev *= kk; if (atk > 0 && tt < atk) e *= tt / atk; if (kind === 2) { e = 0.35 * ev2 + 0.65 * e; ev2 *= kk2; } else if (kind === 4) { e = ev2 * 0.4 + e * 0.6; ev2 *= kk2; }
+        if (snG && t < snN) e *= 1 + snG * (1 - t / snN);
         y *= e * vel * PG * 1.5; L[i] += y * gl; R[i] += y * gr;
         if (ev < 0.0012 && ((kind !== 2 && kind !== 4) || ev2 < 0.0012)) { on = 0; break; } } // off on the decay envelope only (the attack ramp starts at 0); -58 dB under the hit
       ph[0] = p0; ph[1] = p1; ph[2] = p2; ph[3] = p3; ph[4] = p4; ph[5] = p5; B.ic1 = b1; B.ic2 = b2; H.ic1 = h1; H.ic2 = h2; H2.ic1 = g1; H2.ic2 = g2;
       v.t = t; v.wait = wait; v.e = ev; v.e2 = ev2; if (!on) v.on = 0; } }
 }
 // percussion: toms, congas/bongos, cowbell, clave/woodblock, tambourine, timbale — pitched bodies + noise
-class PercVoice { constructor() { this.on = 0; this.t = 0; this.wait = 0; this.vel = 1; this.ph = 0; this.ph2 = 0; this.f = 200; this.dec = 0.2; this.kind = 0; this.bp = new Svf(); this.gl = 1; this.gr = 1; this.e = 1; this.k = 0; this.ep = 1; this.e3 = 1; this.e4 = 1; this.ph3 = 0; shape(this); } }
+class PercVoice { constructor() { this.on = 0; this.t = 0; this.wait = 0; this.vel = 1; this.ph = 0; this.ph2 = 0; this.f = 200; this.dec = 0.2; this.kind = 0; this.bp = new Svf(); this.gl = 1; this.gr = 1; this.e = 1; this.k = 0; this.ep = 1; this.e3 = 1; this.e4 = 1; this.ph3 = 0; this.tz = 0; shape(this); } }
 const PERC_F = [110, 220, 330, 560, 2500, 1100, 0, 420, 3000, 700, 0, 1450, 190, 85, 0, 120, 70, 330, 160, 95, 2200, 820, 480, 2100, 170, 620, 0, 260, 1050, 0, 0, 105],
   PERC_DEC = [0.32, 0.22, 0.12, 0.09, 0.025, 0.05, 0.12, 0.18, 0.012, 0.22, 0.2, 0.9, 0.3, 0.55, 0.07, 0.22, 0.55, 0.38, 0.3, 0.22, 0.035, 0.06, 0.28, 0.6, 1.6, 0.28, 0.006, 0.12, 0.045, 0.16, 0.08, 0.22]; // no allocation per hit
 // the kind index travels in 5 bits of a percussion event (08_deck.js maps it back to a name): 32 kinds at most (v9.4: 16 → 32)
@@ -150,15 +152,16 @@ const PERC_KINDS = { tom: 0, conga: 1, bongo: 2, cowbell: 3, clave: 4, wood: 5, 
 // level trim per kind on the same velocity (measured: tools/perc_test.cjs). 1 = the level the original nine voices already had
 const PERC_TRIM = [1, 1, 1, 1, 1, 1, 1, 1, 1, 0.85, 1.4, 0.57, 0.72, 0.55, 1.7, 0.8, /* v9.4, set against the older kinds by RMS over 150 ms and peak */ 0.9, 0.7, 0.85, 0.8, 0.6, 1.1, 0.9, 0.7, 0.8, 0.8, 1.3, 0.75, 1, 0.3, 1.1, 0.85];
 class Perc {
-  constructor(sr) { this.sr = sr; this.v = Array.from({ length: 6 }, () => new PercVoice()); this.i = 0; this.p = { gain: 1, pitch: 1, dec: 1, noise: 1 }; shape(this); }
+  constructor(sr) { this.sr = sr; this.v = Array.from({ length: 6 }, () => new PercVoice()); this.i = 0; this.p = { gain: 1, pitch: 1, dec: 1, noise: 1, tone: 0, snap: 0 }; shape(this); }
   setKit(k) { Object.assign(this.p, k); }
   trigger(off, vel, kind, note, pan) { const v = pickVoice(this.v); const sr = this.sr;
-    v.on = 1; v.t = 0; v.wait = off; v.vel = vel; v.ph = 0; v.ph2 = 0; v.kind = PERC_KINDS[kind] ?? 1; v.bp.reset();
+    v.on = 1; v.t = 0; v.wait = off; v.vel = vel; v.ph = 0; v.ph2 = 0; v.tz = 0; v.kind = PERC_KINDS[kind] ?? 1; v.bp.reset();
     const pn = clamp(pan || 0, -1, 1); v.gl = Math.cos((pn + 1) * Math.PI / 4) * 1.414; v.gr = Math.sin((pn + 1) * Math.PI / 4) * 1.414;
     const base = note ? mtof(note) : PERC_F[v.kind]; v.f = base * this.p.pitch;
     v.dec = PERC_DEC[v.kind] * (this.p.dec ?? 1); v.vel = vel * PERC_TRIM[v.kind]; v.e = 1; v.k = Math.exp(-1 / (v.dec * sr)); v.ep = 1; v.e3 = 1; v.e4 = 1; v.ph3 = 0;
     if (v.kind === 6) v.bp.set(9000, 0.8, sr); else if (v.kind === 3) v.bp.set(2600, 2.5, sr); else if (v.kind === 10) v.bp.set(3400, 1.4, sr); else if (v.kind === 14) v.bp.set(7000, 0.9, sr); else if (v.kind === 12) v.bp.set(2600, 1, sr); else if (v.kind === 15) v.bp.set(3200, 0.8, sr); else if (v.kind === 19) v.bp.set(1500, 1, sr); else if (v.kind === 20) v.bp.set(2300, 2.2, sr); else if (v.kind === 22) v.bp.set(1100, 2, sr); else if (v.kind === 26) v.bp.set(5200, 1.2, sr); else if (v.kind === 29) v.bp.set(7000, 3, sr); else if (v.kind === 30) v.bp.set(7500, 1, sr); else v.bp.set(v.f * 2.2, 1.2, sr); }
   render(L, R, n) {
+    const snG = (this.p.snap || 0) * 1.6, snN = 0.005 * this.sr, tn = clamp(this.p.tone || 0, -1, 1), tA = tn < 0 ? 1 - Math.exp(-TAU * 16000 * Math.pow(2, 6 * tn) / this.sr) : 1 - Math.exp(-TAU * 80 * Math.pow(2, 5 * tn) / this.sr); // (v9.5) Tone: below 0 a low-pass falling to 250 Hz (a thud), above 0 a high-pass rising to ~2.5 kHz
     const inv = 1 / this.sr, P = this.p, sr = this.sr, kP = Math.exp(-1 / (0.012 * sr)), k3 = Math.exp(-1 / (0.03 * sr)), k4 = Math.exp(-1 / (0.004 * sr)), kZ = Math.exp(-1 / (0.018 * sr)), NZ = P.noise ?? 1;
     for (const v of this.v) { if (!v.on) continue;
       for (let i = 0; i < n; i++) { if (v.wait > 0) { v.wait--; continue; }
@@ -191,5 +194,6 @@ class Perc {
           default: { const pd = 1 + (v.kind === 0 ? 0.5 : 0.25) * v.ep; v.ep *= kP; v.ph += v.f * pd * inv; if (v.ph >= 1) v.ph -= 1; v.ph2 += v.f * 1.52 * pd * inv; if (v.ph2 >= 1) v.ph2 -= 1;
             y = (sin1(v.ph) + 0.25 * sin1(v.ph2) * v.e3) * e; v.e3 *= k3; if (v.kind === 1 || v.kind === 2 || v.kind === 15) { v.bp.run(noise()); y += v.bp.bp * v.e4 * 0.8 * NZ; v.e4 *= k4; } }
         }
+        if (tn) { v.tz += (y - v.tz) * tA; y = tn < 0 ? v.tz : y - v.tz * (0.6 + 0.4 * tn); } if (snG && v.t < snN) y *= 1 + snG * (1 - v.t / snN);
         y *= v.vel * P.gain; L[i] += y * v.gl; R[i] += y * v.gr; if (e < 0.0005) { v.on = 0; break; } } } }
 }

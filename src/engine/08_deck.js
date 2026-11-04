@@ -12,6 +12,7 @@ const SNARE_KIND = ['snare', 'clap', 'rim', null];
 const ARR_TARGET = { drums0: -5, drums1: -3, intro: -4.5, groove: -1.5, groove2: -1, verse: -2, break: -4.5, break2: -5.5, build: -2.5, drop: 0, outro: -2.5, chillA: -2, chillB: 0, ambA: -3, ambB: 0 };
 const TYPE_LAYER = { intro: 'drums1', groove: 'groove', break: 'break', build: 'build', drop: 'drop', outro: 'outro' };
 const BUILD_RAMP = 0; // no extra gain ramp: the riser and the snare roll already swell; a ramp on top made the end of the build as loud as the drop
+const REG_SLOTS = [['bass', 4], ['chords', 5], ['pad', 6], ['lead', 7], ['arp', 8]], REG_CH = { bass: 4, chords: 5, pad: 6, lead: 7, arp: 8 }, REG_FLOOR = [0, 0, 0, 0, 28, 52, 52, 45, 48, 0, 0]; // (v9.5) register: the lowest note each part may take
 const DRUM_SLOTS = ['kick', 'snare', 'hats', 'perc'], DRUM_CH = { kick: 0, snare: 1, hats: 2, perc: 3 };
 const DRUM_U = { uTune: [-12, 12], uDecay: [-1, 1], uTone: [-1, 1], uSnap: [0, 1], uDrive: [0, 1], uLevel: [-18, 6] }; // (v9.5) the six knobs every drum has (Deck.uniform)
 const SPREAD = [-0.32, 0.28, -0.12, 0.36, -0.26, 0.14, -0.38, 0.3, -0.18, 0.22, -0.3, 0.34]; // chord voices fan out by pitch class (lows stay centred)
@@ -30,7 +31,7 @@ class Deck {
     this.leadMono = new Synth(sr, 2, true); this.leadPoly = new Synth(sr, 6, false); this.lead = this.leadPoly; this.arp = new Synth(sr, 8, false);
     this.bankP = new BankPlayer(sr); this.fx = new Fx(sr); this.tex = new Texture(sr); this.mix = new DeckMix(sr); this.synths = [this.bass, this.chords, this.pad, this.leadMono, this.leadPoly, this.arp];
     this.ev = null; this.N = 0; this.ei = 0; this.pos = 0; this.bpm = 124; this.sps = 1; this.playing = 0; this.sections = null; this.secIdx = 0; this.bars = 0; this.loaded = 0;
-    this.opt = { slide: false, accent: false, bright: 1, lfo: 0, pan: 0, vowel: 'a', from: 0, fit: false }; this.loopFrom = -1; this.loopTo = -1; this.chanOn = new Uint8Array(NCH).fill(1);
+    this.opt = { slide: false, accent: false, bright: 1, lfo: 0, pan: 0, vowel: 'a', from: 0, fit: false }; this.reg = new Int8Array(NCH); this.loopFrom = -1; this.loopTo = -1; this.chanOn = new Uint8Array(NCH).fill(1);
     this.arr = null; this.mixLift = null; this.energy = 0.5; this.autoCur = new Float64Array(AUTO_N); this.autoTgt = new Float64Array(AUTO_N); this.autoRate = new Float64Array(AUTO_N); this.space = null; this.wetness = 1; this.liveEch = new Float32Array(NCH).fill(-1); this.fill = null; this.density = 0.5; this.swingX = 0; this.repCode = 0; this.live = { repeat: 0, tape: 0, swirl: 0 }; this.gid = ''; this.sec = null; this.secP = 0; this.ended = 0; this.jumpAt = -1; this.jumpTo = 0; this.glideRate = 0; this.glideTo = 0; this.txRest = 0; this.score = null; this.cal = null; this.pend = null; this.pendAt = -1; shape(this); this.setBpm(124); }
   // energy macro (0…1, 0.5 = as composed): thins hats/perc/arp below 0.5 (see dispatch) and rides the layer levels — melodic
   // parts and percussion fall back at low energy and push forward at high, the kick and bass stay where the mix put them
@@ -45,7 +46,7 @@ class Deck {
     // between genres (a hard-techno rumble or a rim snare survived into the next house track — and never in offline renders)
     for (const d of [this.kick, this.snare, this.hats, this.perc]) { if (!d.p0) d.p0 = Object.assign({}, d.p); d.p = Object.assign({}, d.p0); }
     this.kick.setKit(k.kick); this.snare.setKit(k.snare); this.hats.setKit(k.hats); this.perc.setKit(k.perc); this.bass.setKit(k.bass); this.setDrums(k, score.meta.gid, true);
-    this.key = score.meta.key | 0; this.du = {}; this.dBase = {}; for (const sl of DRUM_SLOTS) { const d = this[sl]; this.dBase[sl] = Object.assign({}, d.p); this.uniform(sl, k[sl] || {}, true); } // (v9.5) the six knobs every drum has
+    this.key = score.meta.key | 0; this.du = {}; this.dBase = {}; for (const [sl, c] of REG_SLOTS) this.setReg(c, k[sl] && k[sl].oct || 0); for (const sl of DRUM_SLOTS) { const d = this[sl]; this.dBase[sl] = Object.assign({}, d.p); this.uniform(sl, k[sl] || {}, true); } // (v9.5) the six knobs every drum has
     if (k.chords) this.chords.setKit(k.chords); if (k.pad) this.pad.setKit(k.pad);
     this.lead = score.roles.lead === 'seq' || score.roles.lead === 'riff' ? this.leadMono : this.leadPoly; if (k.lead) this.lead.setKit(k.lead); // sequences and riffs are monophonic lines with glide
     const a = k.hook || k.arp; if (a) this.arp.setKit(a);
@@ -55,26 +56,34 @@ class Deck {
   // live sound edit: params merge into the kit IN PLACE, so notes already sounding morph with the knob (synth voices
   // hold a reference to their kit); drums recompute their coefficients. slot: kick snare hats perc bass chords pad lead arp
   tweak(slot, prm) { const syn = { bass: this.bass, chords: this.chords, pad: this.pad, lead: this.lead, arp: this.arp }[slot];
+    if (syn && prm.oct != null) { const c = REG_CH[slot]; if (c != null) this.setReg(c, prm.oct); if (Object.keys(prm).length === 1) return; }
     if (syn) { Object.assign(syn.p, prm); if (prm.model != null && MODEL[prm.model] != null) syn.m = MODEL[prm.model]; if (slot === 'lead') { const o = this.lead === this.leadMono ? this.leadPoly : this.leadMono; Object.assign(o.p, syn.p); o.m = syn.m; } return; }
     if (slot === 'drums') { if (prm.family != null) this.bankP.setFamily(prm.family); return; }
     if (prm.bank && (slot === 'snare' || slot === 'hats' || slot === 'perc')) { this.bankP.prm[slot] = Object.assign({}, BANK_DEF, this.bankP.prm[slot], prm.bank); if (this.bBase) this.bBase[slot] = Object.assign({}, BANK_DEF, this.bBase[slot], prm.bank); if (this.du && this.du[slot]) this.uniform(slot, {}); return; }
     const d = { kick: this.kick, snare: this.snare, hats: this.hats, perc: this.perc }[slot]; if (!d) return; const U = {}, own = {}; for (const k in prm) (DRUM_U[k] ? U : own)[k] = prm[k];
-    if (Object.keys(own).length) { d.setKit(own); if (this.dBase && this.dBase[slot]) Object.assign(this.dBase[slot], own); } if (this.du && (Object.keys(U).length || own.keyTrack != null)) this.uniform(slot, U); }
+    if (Object.keys(own).length) { d.setKit(own); if (this.dBase && this.dBase[slot]) Object.assign(this.dBase[slot], own); } if (own.keyTrack != null) U.keyTrack = own.keyTrack; if (this.du && Object.keys(U).length) this.uniform(slot, U); }
+  // (v9.5) REGISTER: a part an octave or two lower or higher that still sits — a note that would land under the part's floor (the
+  // bass's room: chords and pad E3, lead A2, arp C3; the bass itself E1) or over its ceiling folds back an octave, so lowered chords
+  // open up instead of muddying the bass; a lowered part is brightened (its filter opens a quarter octave per octave: the same
+  // timbre, not a duller one), lifted 1.5 dB per octave (the ear hears low notes quieter) and its channel's high-pass opens so its
+  // new fundamental is not cut; a raised part the other way round
+  setReg(c, oct) { const r = clamp(Math.round(+oct || 0), -2, 2); this.reg[c] = r; this.mix.hpMul[c] = r < 0 ? 0.55 : 1; }
+  regNote(c, a) { const lo = REG_FLOOR[c], hi = lo + 48; let n = a + 12 * this.reg[c]; while (n < lo) n += 12; while (n > hi) n -= 12; return n; }
   // (v9.5) THE SAME SIX KNOBS ON EVERY DRUM: uTune (semitones), uDecay and uTone (−1…1, 0 = as designed) work on whatever plays the part —
   // the synthesized voice (mapped onto its own parameters, from the kit as loaded and as its own knobs set it), the kit family's
   // one-shot or your own sample (the bank's Tune / Decay / Tone); uSnap and uDrive (0…1) add the channel's transient shaper and
   // saturator, uLevel (dB, −18…+6) its level — so they mean the same on an 808-style snare, a synthesized one and a sample.
   // keyTrack (kick): its body tuned to the track's key (the root between 38 and 62 Hz)
-  uniform(slot, u, fresh) { const d = this[slot], B = this.dBase && this.dBase[slot]; if (!d || !B) return; const cur = this.du[slot] = fresh ? {} : this.du[slot] || {}; for (const k in DRUM_U) if (u[k] != null && Number.isFinite(+u[k])) cur[k] = clamp(+u[k], DRUM_U[k][0], DRUM_U[k][1]);
+  uniform(slot, u, fresh) { /* see above */ const d = this[slot], B = this.dBase && this.dBase[slot]; if (!d || !B) return; const cur = this.du[slot] = fresh ? {} : this.du[slot] || {}; for (const k in DRUM_U) if (u[k] != null && Number.isFinite(+u[k])) cur[k] = clamp(+u[k], DRUM_U[k][0], DRUM_U[k][1]);
     if (u.keyTrack != null) cur.keyTrack = u.keyTrack ? 1 : 0;
-    const t = Math.pow(2, (cur.uTune || 0) / 12), dc = Math.pow(2, 1.5 * (cur.uDecay || 0)), o = cur.uTone || 0, q = {};
-    if (slot === 'kick') { let f = B.fEnd; if (cur.keyTrack) { f = mtof(24 + (this.key % 12)); while (f < 38) f *= 2; while (f > 62) f /= 2; } q.fEnd = f * t; q.fStart = B.fStart * (q.fEnd / B.fEnd); if (B.len > 0) q.len = clamp(B.len * dc, 0.08, 2.5); else q.aDec = clamp(B.aDec * dc, 0.03, 2); q.lp = clamp(B.lp * Math.pow(2, 2 * o), 600, 18000); q.click = clamp(B.click * (1 + 0.8 * o), 0, 1); }
-    else if (slot === 'snare') { q.tone = B.tone * t; q.tone2 = B.tone2 * t; q.clapF = B.clapF * t; q.rimF = B.rimF * t; q.nDec = clamp(B.nDec * dc, 0.02, 1.2); q.toneDec = clamp(B.toneDec * dc, 0.01, 0.6); q.clapTail = clamp(B.clapTail * dc, 0.03, 1); q.nLp = clamp(B.nLp * Math.pow(2, 1.5 * o), 1500, 18000); q.nHp = clamp(B.nHp * Math.pow(2, o), 200, 6000); }
-    else if (slot === 'hats') { q.base = B.base * t; q.rideF = B.rideF * t; q.cDec = clamp(B.cDec * dc, 0.006, 0.4); q.oDec = clamp(B.oDec * dc, 0.04, 2); q.shakDec = clamp(B.shakDec * dc, 0.02, 0.4); q.hpF = clamp(B.hpF * Math.pow(2, 1.2 * o), 1500, 15000); q.bpF = clamp(B.bpF * Math.pow(2, 0.8 * o), 2000, 16000); }
-    else { q.pitch = clamp(B.pitch * t, 0.25, 4); q.dec = clamp(B.dec * dc, 0.1, 6); q.noise = clamp(B.noise * (1 + 0.8 * o), 0, 3); }
+    const t = Math.pow(2, (cur.uTune || 0) / 12), dc = Math.pow(2, 1.5 * (cur.uDecay || 0)), o = cur.uTone || 0, sn = cur.uSnap || 0, q = {};
+    if (slot === 'kick') { let f = B.fEnd; if (cur.keyTrack) { const r = mtof(24 + (this.key % 12)); let best = r, bd = 1e9; for (let k = -1; k < 4; k++) { const c = r * Math.pow(2, k), dd = Math.abs(Math.log2(c / B.fEnd)); if (c >= 36 && c <= 90 && dd < bd) { bd = dd; best = c; } } f = best; } /* (the root nearest the kit's own tuning) */ q.fEnd = f * t; q.fStart = B.fStart * (q.fEnd / B.fEnd); if (B.len > 0) q.len = clamp(B.len * dc, 0.08, 2.5); else q.aDec = clamp(B.aDec * dc, 0.03, 2); q.lp = clamp(B.lp * Math.pow(2, 3 * o), 300, 18000); q.click = clamp(B.click * (1 + 0.9 * o) + 0.15 * Math.max(0, o) + 0.35 * sn, 0, 1); q.punch = clamp(B.punch + 0.6 * sn, 0, 1.5); q.clickF = clamp(B.clickF * Math.pow(2, o), 800, 12000); }
+    else if (slot === 'snare') { const th = Math.sqrt(t); q.tone = B.tone * t; q.tone2 = B.tone2 * t; q.clapF = clamp(B.clapF * t * Math.pow(2, 0.9 * o), 300, 6000); q.rimF = B.rimF * t; q.nDec = clamp(B.nDec * dc, 0.02, 1.2); q.toneDec = clamp(B.toneDec * dc, 0.01, 0.6); q.clapTail = clamp(B.clapTail * dc, 0.03, 1); q.lift = sn; q.nLp = clamp(B.nLp * th * Math.pow(2, 1.5 * o), 1500, 18000); q.nHp = clamp(B.nHp * th * Math.pow(2, o), 200, 6000); }
+    else if (slot === 'hats') { const th = t; q.base = B.base * t; q.rideF = B.rideF * t; q.shakF = clamp(B.shakF * th, 1500, 16000); q.cDec = clamp(B.cDec * dc, 0.006, 0.4); q.oDec = clamp(B.oDec * dc, 0.04, 2); q.shakDec = clamp(B.shakDec * dc, 0.02, 0.4); q.hpF = clamp(B.hpF * th * Math.pow(2, 1.2 * o), 1500, 15000); q.bpF = clamp(B.bpF * th * Math.pow(2, 0.8 * o), 2000, 16000); q.snap = sn; }
+    else { q.pitch = clamp(B.pitch * t, 0.25, 4); q.dec = clamp(B.dec * dc, 0.1, 6); q.noise = clamp(B.noise * (1 + 0.5 * o), 0, 3); q.tone = clamp((B.tone || 0) + o, -1, 1); q.snap = sn; }
     d.setKit(q);
-    if (slot !== 'kick') { const P = this.bankP, bb = this.bBase && this.bBase[slot] ? this.bBase[slot] : (this.bBase = this.bBase || {}, this.bBase[slot] = Object.assign({}, BANK_DEF, P.prm[slot])); P.prm[slot] = Object.assign({}, bb, { tune: clamp((bb.tune || 0) + (cur.uTune || 0), -24, 24), decay: clamp((bb.decay ?? 1) * Math.min(1, dc), 0.02, 1), tone: clamp((bb.tone || 0) + o, -1, 1) }); }
-    const c = DRUM_CH[slot], M = this.mix; M.uTr[c] = cur.uSnap || 0; M.uSat[c] = cur.uDrive || 0; M.ul[c] = dbToGain(cur.uLevel || 0); M.setCharacter(M.heat, M.punch); }
+    if (slot !== 'kick') { const P = this.bankP, bb = this.bBase && this.bBase[slot] ? this.bBase[slot] : (this.bBase = this.bBase || {}, this.bBase[slot] = Object.assign({}, BANK_DEF, P.prm[slot])); P.prm[slot] = Object.assign({}, bb, { tune: clamp((bb.tune || 0) + (cur.uTune || 0), -24, 24), decay: clamp((bb.decay ?? 1) * Math.min(1, dc), 0.02, 1), tone: clamp((bb.tone || 0) + o, -1, 1), snap: clamp((bb.snap || 0) + sn, 0, 1) }); }
+    const c = DRUM_CH[slot], M = this.mix; M.uTr[c] = 0.35 * sn; M.uSat[c] = cur.uDrive || 0; M.ul[c] = dbToGain(cur.uLevel || 0); M.setCharacter(M.heat, M.punch); }
   // (v9.3) the drum family of a track: the set file's choice (kits.drumFam), else its genre's; Tune / Decay / Tone / Snap per part
   // (kits.drumPrm). A new track restarts the round robin (an offline render and the live deck play the same variants)
   setDrums(k, gid, fresh) { const B = this.bankP; B.setFamily(k.drumFam || BANK_FOR_GENRE[gid] || 'forge'); B.prm = {}; const P = k.drumPrm || {}; this.bBase = {};
@@ -142,6 +151,7 @@ class Deck {
       case 10: if (E.d[i] < 0) { this.tex.setChord(f, E.x[i]); this.mix.reso.setChord(f, E.x[i]); } else this.tex.set(a | 0, v, E.d[i] * this.sps); break; // texture level ramp, or (d < 0) the chord: the texture and the resonator tune to it
       default: { const syn = ch === 4 ? this.bass : ch === 5 ? this.chords : ch === 6 ? this.pad : ch === 7 ? this.lead : this.arp;
         o.slide = !!(f & 1); o.accent = !!(f & 2); o.bright = E.x[i] || 1; o.lfo = ch === 4 ? E.y[i] : 0; o.vowel = ch === 7 && E.y[i] > 0 ? VOWEL_LIST[(E.y[i] - 1) | 0] : 'a'; o.pan = (ch === 5 || ch === 6 || ch === 8) && a >= 52 ? SPREAD[(a | 0) % 12] : 0; o.fit = (ch === 5 || ch === 6) && E.d[i] >= 8;
+        if (this.reg[ch]) { const rn = this.regNote(ch, a), sh = (rn - a) / 12; o.bright *= Math.pow(2, -0.25 * sh); syn.trigger(off, rn, v * Math.pow(10, -0.075 * sh), E.d[i] * this.sps, o); break; } // (each note by how far it really moved: a folded one is not compensated)
         syn.trigger(off, a, v, E.d[i] * this.sps, o); }
     }
   }

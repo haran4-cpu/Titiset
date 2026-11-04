@@ -714,7 +714,7 @@ function composeTrack(gid, seed, o) {
       if (L.bass && G.bass) {
         const bvI = bassVariant(sec, b, bassPatAuto, G.bass.pats.length), pat = laneBar((b % 4 === 3 && !sec.bv && sec.type !== 'build' ? bTail : bMut)[b >= 16 ? 1 : 0][bvI], b); patB[bar] = bvI;
         const root = bassRoot(P, c), nRoot = bassRoot(P, cNext), minor = c.q === 'min' || c.iv[1] === 3;
-        const evs = parsePat(pat); let prevNote = null;
+        const evs = parsePat(pat), accS = G.bass.pats[bvI] && G.bass.pats[bvI].acc ? laneBar(G.bass.pats[bvI].acc, b) : null; let prevNote = null; // (v9.5) the pattern's accent lane: an accented note opens the filter further (the 303 accent)
         if (phraseBar === 7 && b !== sec.bars - 1 && evs.length) { const lastE = evs[evs.length - 1]; if (lastE.len <= 2 && /[RO]/i.test(lastE.ch)) { const sl = lastE.ch !== lastE.ch.toUpperCase(); lastE.ch = nRootDiffers(P, c, cNext) ? (sl ? 'a' : 'A') : (sl ? 'o' : 'O'); } } // phrase turnaround
         const wob = G.bass.wobble ? G.bass.wobble[(b + (phraseBar >> 1)) % G.bass.wobble.length] : 0;
         for (const e of evs) { if (e.step >= silentFrom) continue;
@@ -725,7 +725,8 @@ function composeTrack(gid, seed, o) {
             case 'P': { const dir = nRoot >= root ? 1 : -1; m = snapToScale(root + dir * 2, P.key, P.mode); break; } }
           if (m < (P.bassFloor || 26)) m += 12; // (v9.2) never under the genre's floor
           const len = cap(e.step, e.len * (e.len > 1 ? 0.98 : G.bass.gate));
-          S.push(t0 + e.step + sw(e.step), CH.bass, m, e.vel * (sec.type === 'build' ? 0.85 : 1), len, (slide ? 1 : 0) | (e.vel >= 1 ? 2 : 0), L.bass < 1 ? 0.5 + 0.5 * L.bass : 0, wob);
+          const acc = accS && accS[e.step] === 'x', vel = acc ? 1 : e.vel;
+          S.push(t0 + e.step + sw(e.step), CH.bass, m, vel * (sec.type === 'build' ? 0.85 : 1), len, (slide ? 1 : 0) | (vel >= 1 ? 2 : 0), L.bass < 1 ? 0.5 + 0.5 * L.bass : 0, wob);
           prevNote = m; }
       }
 
