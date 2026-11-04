@@ -106,7 +106,7 @@ async function startAudio() {
       const dt = performance.now() - t; busy += dt; nb++; if (++cnt % 1 === 0) { const m = E.meters(); m.blkMax = dt; m.load = busy / (nb * per); if (nb >= 20) { busy = 0; nb = 0; } m.late = A.spLate || 0; onEngine(m); while (E.outbox.length) onEngine(E.outbox.shift()); } };
     sp.connect(ctx.destination); A.mode = 'ScriptProcessor (fallback)'; }
   if (ctx.state !== 'running') { if (WEBKIT) { await Promise.race([ctx.resume().catch(() => {}), new Promise((r) => setTimeout(r, 2500))]); if (ctx.state !== 'running') armUnlock(ctx); } else await ctx.resume(); }
-  { const ps = ctx.playoutStats; if (ps) { A.ps0 = ps.fallbackFramesEvents; if (!A.worker) A.underKnown = true; } } // glitches the sound card had to fill, counted from here (the Stable engine counts its own player's dry runs; the report shows both)
+  { const ps = cardStats(ctx); if (ps) { A.ps0 = ps.drops; A.psApi = ps.api; if (!A.worker) A.underKnown = true; } } // glitches the sound card had to fill, counted from here (the Stable engine counts its own player's dry runs; the report shows both)
   A.lat = ((ctx.baseLatency || 0) + (ctx.outputLatency || 0)) * 1000; if (!worklet && !A.degraded) A.degraded = 'this browser refused the audio worklet';
   A.started = performance.now(); healthStart(); restoreUserSamples(); if (A.degraded) degradedNotice(); if (ANDROID) workerPace(false); /* the tight pace from the start on Android */ setTimeout(() => { const p = offThread({ type: 'compose', gid: 'techno', seed: 1 }); if (p) p.catch(() => {}); }, 300); send({ type: 'level', db: outLevel() }); try { if (localStorage.getItem('forge.wasm') === 'off') send({ type: 'wasm', on: false }); } catch (e) { /* default: on */ } // the composer thread loads and warms up now, not on the first edit
   $('#power').classList.add('on'); $('#power').textContent = 'Audio on'; renderEngineInfo();
@@ -124,6 +124,11 @@ function renderEngineInfo() { const el = $('#engine'); if (!el) return; const bu
 // where the ENGINE is now (Stable renders ahead of what is heard): quantised commands are scheduled from here, so a line that is
 // still ahead of the listener but already rendered is never targeted
 // a Live engine that keeps glitching starts on the big buffer next time (an explicit engine choice is never overridden)
+// (v9.5) the sound card's glitch counter: Chrome first shipped it as AudioContext.playoutStats (fallbackFramesEvents, latency in ms) and
+// renamed it AudioContext.playbackStats (underrunEvents, latency in seconds) — Chrome 153 has only the new name, and 9.4 read only the old
+// one, so on a current Chrome the Live engine counted no glitches at all. Both are read here, in one shape: drops (events), lat/latMax (ms).
+function cardStats(ctx) { const p = ctx && ctx.playoutStats; if (p && p.fallbackFramesEvents != null) return { drops: p.fallbackFramesEvents, lat: p.averageLatency, latMax: p.maximumLatency, api: 'playoutStats' };
+  const b = ctx && ctx.playbackStats; if (b && b.underrunEvents != null) return { drops: b.underrunEvents, lat: b.averageLatency * 1000, latMax: b.maximumLatency * 1000, api: 'playbackStats' }; return null; }
 function glitchWatch() { const u = A.underKnown ? (A.under || 0) : (A.lateGaps || 0); if (A.glitchTold || !/^Live/.test(A.mode) || A.mode === 'Live · safe') return; const sec = (performance.now() - (A.started || 0)) / 1000; if (u < 15 && !(u >= 6 && sec < 120)) return; A.glitchTold = true;
   let explicit = false; try { explicit = localStorage.getItem('forge.engine2') != null; if (!explicit) localStorage.setItem('forge.autoSafe', '1'); } catch (e) { explicit = true; }
   toast(`The audio glitched ${u} times — ${explicit ? 'pick “Live · safe” in the Engine menu' : 'the next start uses the Safe engine'} (a bigger buffer: steadier audio, more delay to the controls — the header shows the output latency). Reload the page to switch now`, 14000); }
@@ -134,7 +139,7 @@ function workerPace(tight) { const now = performance.now(); if (tight) A.paceT =
   const msg = want === 'tight' ? { type: 'pace', work: 4, rest: 4 } : { type: 'pace', work: 10, rest: 2 }; for (const w of [composerW, analyser]) if (w && w.postMessage) try { w.postMessage(msg); } catch (e) { /* gone */ } }
 function schedPos(D) { return livePos(D) + (A.aheadMs || 0) / 1000 * (D.bpm || 124) / 15; }
 function onEngine(m) { if (A.tap) A.tap(m); if (m.type === 'warm' && A.warmDone) { A.warmDone(); return; } if (m.type === 'meter') healthMeter(m);
-  if (m.type === 'meter' && A.underKnown && !A.worker) { const ps = A.ctx.playoutStats, u = ps.fallbackFramesEvents - A.ps0; if (u > (A.under || 0)) { A.under = u; renderEngineInfo(); glitchWatch(); workerPace(true); } else if (A.pace === 'tight') workerPace(false); }
+  if (m.type === 'meter' && A.underKnown && !A.worker) { const ps = cardStats(A.ctx), u = ps ? ps.drops - A.ps0 : 0; if (u > (A.under || 0)) { A.under = u; renderEngineInfo(); glitchWatch(); workerPace(true); } else if (A.pace === 'tight') workerPace(false); }
   if (m.type === 'meter') { meter = m; const now = performance.now(); lead = m.lead;
     // the output latency is often unknown (0) when the context is created and only reported once the device runs: keep the estimate current (it places the playhead where it is heard, and the MIDI clock with it)
     if (A.ctx && now - (A.latT || 0) > 2000) { A.latT = now; const L = ((A.ctx.baseLatency || 0) + (A.ctx.outputLatency || 0)) * 1000; if (L > 0 && Math.abs(L - (A.lat || 0)) > 5) A.lat = L; } // (a new estimate only when it moved more than 5 ms: the reported value wanders by a few ms, and every change now moves the heard position and the MIDI clock)

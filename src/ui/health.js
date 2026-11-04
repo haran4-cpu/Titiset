@@ -20,17 +20,17 @@ function healthMeter(m) { if (!HEALTH.t0) return; const u = A.under || 0;
   if (u > HEALTH.lastUnder) { const recent = HEALTH.ev.filter((e) => e[0] > hNow() - 3000 && (e[1].startsWith('cmd:') || e[1] === 'slow')).map((e) => e[1].slice(4) + (e[2] ? ' (' + e[2] + ')' : ''));
     HEALTH.glitches.push({ t: hNow(), n: u - HEALTH.lastUnder, total: u, load: +(m.load || 0).toFixed(2), eco: m.eco || 0, before: recent.slice(-8) }); hLog('glitch', `${u - HEALTH.lastUnder} (total ${u})`); HEALTH.lastUnder = u; }
   if ((m.load || 0) > HEALTH.worstLoad) HEALTH.worstLoad = m.load;
-  const t = performance.now(); if (t - HEALTH.sampleT < 2000) return; HEALTH.sampleT = t; const ps = A.ctx && A.ctx.playoutStats;
+  const t = performance.now(); if (t - HEALTH.sampleT < 2000) return; HEALTH.sampleT = t; const ps = cardStats(A.ctx);
   HEALTH.samples.push({ t: hNow(), load: +(m.load || 0).toFixed(3), eco: m.eco || 0, under: u, lufsS: m.lufsS != null ? +m.lufsS.toFixed(1) : null, tp: m.tp != null ? +m.tp.toFixed(1) : null, gr: m.gr != null ? +m.gr.toFixed(1) : null,
-    lat: ps ? +ps.averageLatency.toFixed(1) : null, latMax: ps ? +ps.maximumLatency.toFixed(1) : null, buf: A.leadF || null, heap: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1e6) : null,
+    lat: ps ? +ps.lat.toFixed(1) : null, latMax: ps ? +ps.latMax.toFixed(1) : null, buf: A.leadF || null, heap: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1e6) : null,
     decks: [0, 1].map((i) => decks[i].playing ? (decks[i].gid || '') + '@' + Math.round(decks[i].pos || 0) : '-'), long: DIAG.long });
   if (HEALTH.samples.length > 1800) HEALTH.samples.splice(0, 300); }
 const FORGE_VER = 'v__FORGE_VERSION__ · build __FORGE_BUILD__';
 function healthEnv() { const c = A.ctx, n = navigator; return { app: 'FORGE', version: FORGE_VER, when: new Date().toISOString(), ua: n.userAgent, platform: (n.userAgentData && n.userAgentData.platform) || n.platform, cores: n.hardwareConcurrency, memoryGB: n.deviceMemory || null,
   screen: `${screen.width}×${screen.height} @${devicePixelRatio}`, engine: A.mode, enginePref: engPref(), android: ANDROID, renderAheadMs: A.worker && c ? Math.round((A.leadF || 0) / c.sampleRate * 1000) : null, sampleRate: c ? c.sampleRate : null, baseLatencyMs: c ? +(c.baseLatency * 1000).toFixed(1) : null, outputLatencyMs: c && c.outputLatency ? +(c.outputLatency * 1000).toFixed(1) : null,
-  glitchCounter: A.worker ? 'player underruns (buffered engine)' : A.underKnown ? 'sound card (playoutStats)' : 'not available in this browser', crossOriginIsolated: !!window.crossOriginIsolated, dspVoices: meter && meter.wasm ? 'WebAssembly' : 'JavaScript' }; }
+  glitchCounter: A.worker ? 'player underruns (buffered engine)' : A.underKnown ? `sound card (${A.psApi || 'playoutStats'})` : 'not available in this browser', crossOriginIsolated: !!window.crossOriginIsolated, dspVoices: meter && meter.wasm ? 'WebAssembly' : 'JavaScript' }; }
 function healthSummary() { const g = HEALTH.glitches, d = HEALTH.samples, mins = hNow() / 60000; const loads = d.map((s) => s.load).sort((a, b) => a - b);
-  const psN = A.ctx && A.ctx.playoutStats && A.ps0 != null ? A.ctx.playoutStats.fallbackFramesEvents - A.ps0 : null;
+  const psC = cardStats(A.ctx), psN = psC && A.ps0 != null ? psC.drops - A.ps0 : null;
   return { minutes: +mins.toFixed(1), glitches: A.under || 0, glitchEvents: g.length, soundCardGlitches: psN, eco: meter ? meter.eco || 0 : null, worstLoad: +HEALTH.worstLoad.toFixed(2), slowestAudioCallMs: HEALTH.slowMax || 0, medianLoad: loads.length ? loads[loads.length >> 1] : null, longTasks: DIAG.long, longestTaskMs: Math.round(DIAG.longMax), engineHeals: DIAG.heals || 0, refusedCommands: DIAG.rejected || 0,
     wakeLock: HEALTH.wakeState, battery: HEALTH.battery ? (HEALTH.battery.charging ? 'charging' : `on battery ${Math.round(HEALTH.battery.level * 100)} %`) : 'unknown' }; }
 // saveFile (perform.js): the viewer's Downloads capability inside a Claude page — a plain <a download> is inert there — and an ordinary download everywhere else
