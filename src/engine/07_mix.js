@@ -171,7 +171,7 @@ class MixCarve {
   // M: the DeckMix (its channel buffers, strips and gains); amt: 0…1
   block(M, n, amt) { const sr = this.sr, kA = 1 - Math.exp(-n / (0.003 * sr)), kP = Math.exp(-n / (2 * sr)), S = M.s;
     for (const k of CARVE_KEYS) { const L = M.bufL[k], R = M.bufR[k]; let a = 0; for (let i = 0; i < n; i++) { const x = L[i] < 0 ? -L[i] : L[i], y = R[i] < 0 ? -R[i] : R[i]; if (x > a) a = x; if (y > a) a = y; }
-      const s = S[k], act = s.mute ? 0 : Math.min(1, s.gs / (s.g + 1e-9)); a *= act; this.env[k] += (a - this.env[k]) * (a > this.env[k] ? kA : 1 - Math.exp(-n / (CARVE_REL[k] * sr))); this.pk[k] = Math.max(1e-4, a, this.pk[k] * kP); }
+      const s = S[k], act = M.stemPass ? Math.min(1, s.gu / (s.g + 1e-9)) : s.mute ? 0 : Math.min(1, s.gs / (s.g + 1e-9)); /* (a stem pass keys as the mix did: the stems add up to the mix) */ a *= act; this.env[k] += (a - this.env[k]) * (a > this.env[k] ? kA : 1 - Math.exp(-n / (CARVE_REL[k] * sr))); this.pk[k] = Math.max(1e-4, a, this.pk[k] * kP); }
     for (let b = 0; b < this.bands.length; b++) { const B = this.bands[b]; let key = 0; for (const [k, w] of B.keys) { const v = w * this.env[k] / this.pk[k]; if (v > key) key = v; }
       const tgt = B.db * amt * Math.min(1, key * 1.6), g0 = B.g, g1 = g0 + (tgt - g0) * (B.ls ? 0.6 : 0.3); B.g = g1; this.dbg[b] = g1; const z = B.z;
       if (g0 > -0.02 && g1 > -0.02 && Math.abs(z[0]) + Math.abs(z[1]) + Math.abs(z[2]) + Math.abs(z[3]) < 1e-9) { z.fill(0); continue; } // flat and settled: nothing to do
@@ -228,7 +228,7 @@ class DeckMix {
     if (fa < -0.02) { const f = 20000 * Math.pow(0.012, -fa); this.filtL.set(f, 0.9, sr); this.filtR.set(f, 0.9, sr); } else if (fa > 0.02) { const f = 20 * Math.pow(250, fa); this.filtL.set(f, 0.9, sr); this.filtR.set(f, 0.9, sr); }
     // a channel's gain (its mute, its layer level, the energy macro) moves 35 % of the way per block, and (v9.2) as a ramp INSIDE the
     // block from where it stood (gp) to where it goes (gs): stepped once per block, a mute clicked (a 35 % step on a bass note)
-    for (let c = 0; c < NCH; c++) { const s = S[c]; s.gp = s.gs; s.gs += ((s.mute ? 0 : s.g * this.eg[c] * this.txg[c] * this.ug[c] * this.ul[c]) - s.gs) * 0.35; if (c >= 5 && c <= 8 || c === 2 || c === 3 || c === 1) this.setHP(c, Math.max(CH_HP[c] * this.hpMul[c], c >= 5 && c <= 8 ? this.autoHP : this.autoHP * 0.35)); }
+    for (let c = 0; c < NCH; c++) { const s = S[c]; s.gp = s.gs; const gt = s.g * this.eg[c] * this.txg[c] * this.ug[c] * this.ul[c]; s.gs += ((s.mute ? 0 : gt) - s.gs) * 0.35; const g0u = s.gu == null ? 1 : s.gu; s.gu = g0u + (gt - g0u) * 0.35; /* (v10) gu: the same gain without the mute — the carve's key in an export's stem pass, where the other parts are muted only to isolate one */ if (c >= 5 && c <= 8 || c === 2 || c === 3 || c === 1) this.setHP(c, Math.max(CH_HP[c] * this.hpMul[c], c >= 5 && c <= 8 ? this.autoHP : this.autoHP * 0.35)); }
     const oL = this.outL, oR = this.outR, rL = this.revL, rR = this.revR, dL = this.dlyL, dR = this.dlyR, rb = this.revBoost;
     const EL = this.eL, ER = this.eR, ZL = this.zL, ZR = this.zR, HL = this.hL, HR = this.hR; let snd = 0; for (let c = 0; c < NCH; c++) if (S[c].ech || S[c].rsn || S[c].shm) { snd = 1; break; }
     if (snd || this.anySend) { EL.fill(0, 0, n); ER.fill(0, 0, n); ZL.fill(0, 0, n); ZR.fill(0, 0, n); HL.fill(0, 0, n); HR.fill(0, 0, n); } this.anySend = snd;

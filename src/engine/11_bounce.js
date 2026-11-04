@@ -38,7 +38,7 @@ async function bounceRun(m, progress, emit) { const sr = m.sr || 44100, s = m.sc
     if (m.cal) M.setLoudness(m.cal.master + (m.levelDb || 0)); else if (m.levelDb) M.setLoudness(m.levelDb); if (trim) D.mix.trim = D.mix.trimS = trim;
     // a stem pass renders every part and mutes the others at the mixer: the parts share one noise generator (the hats, snares, risers and
     // plucks draw from it in turn), so a pass that left parts out handed the others different noise — tried, 5–10 dB off the mix
-    const grp = pass ? BOUNCE_STEMS[pass - 1][1] : null; if (grp) for (let c = 0; c < NCH; c++) if (!grp.includes(c)) { const st = D.mix.s[c]; st.mute = 1; st.gs = st.gp = 0; }
+    const grp = pass ? BOUNCE_STEMS[pass - 1][1] : null; if (grp) for (let c = 0; c < NCH; c++) if (!grp.includes(c)) { const st = D.mix.s[c]; st.mute = 1; st.gs = st.gp = 0; } if (grp) D.mix.stemPass = true; // (v10) the mix carve keys from every part, as in the mix pass
     if (!pass && wantStems) M.cap = { g: new Float32Array(128), l: new Float32Array(128), g1, g2, t: 0, clipAt: (j, a, b) => { if (clip.n === clip.at.length) { const k = clip.n * 2, x = new Int32Array(k), y = new Float32Array(k), z = new Float32Array(k); x.set(clip.at); y.set(clip.l); z.set(clip.r); clip.at = x; clip.l = y; clip.r = z; } clip.at[clip.n] = j; clip.l[clip.n] = a; clip.r[clip.n] = b; clip.n++; } };
     if (pass) M.rep = { g1, g2, clip, ck: 0, t: 0, w: 0, ql: new Float32Array(M.lim.DL), qr: new Float32Array(M.lim.DL) };
     const enc = fmt === 'mp3' ? mp3Encoder(sr, 2, m.kbps || 320) : null, w24 = fmt === 'wav' && !pass;
