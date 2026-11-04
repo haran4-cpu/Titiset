@@ -201,3 +201,15 @@ From IntelliDAW only ideas were taken: none of its presets, code or sounds.
   - techno, progressive house and hard techno failed on 1–3 dropouts, with audio blocks of at most 6 ms.
   - trance failed on a 58 ms block and 4 dropouts.
   - The failing genres change from run to run: a run on a quiet machine had 1 failure (jersey club, 58 ms), and the genres that failed alone passed 3 times in a row.
+
+**Audio audits — 1 of 2 pass:**
+- The WAV audit passes, with 4 warnings: loudness, tempo and clipping of 33 genres, measured by tools that share no code with the engine.
+- **✗ part audit: 9 of 33 tracks.** They are the same 9 tracks as in 9.4, for the same reason: colored timbres whose 3rd or 5th harmonic reads stronger than the audit's model of a note. Their fundamentals measure in tune, and the bass is 375 of 375 notes within 50 cents.
+
+**Reported, not graded:**
+- Timbre distance between two tracks of a genre: 9.73 dB.
+- Stabs, voicing, lead–arp dialogue, texture, arrangement and balance: run, figures in the logs.
+
+**Summary:**
+- 56 of 62 graded steps pass.
+- The 6 that fail are the 9 part-audit tracks known since 9.4 and the real-time timing checks of this sandbox: liveset, the two short soaks, capture and cert. The 10-minute soak is clean.
