@@ -148,9 +148,42 @@ class DeckFX {
   revCfg(P) { const sc = this.sr / 44100, sz = clamp(P.size, 0, 1); for (let q = 0; q < 4; q++) { this.rvLen[q] = Math.max(8, Math.min(this.rvL[q].length - 1, Math.round(REV_LEN[q] * (0.45 + 1.1 * sz) * sc))); if (this.rvI[q] >= this.rvLen[q]) this.rvI[q] = 0; }
     const t60 = 0.4 + 7 * sz * sz, avg = (this.rvLen[0] + this.rvLen[1] + this.rvLen[2] + this.rvLen[3]) / 4; this.rvG = P.freeze ? 1 : Math.pow(10, -3 * avg / (t60 * this.sr)); this.rvDa = P.freeze ? 1 : 0.85 - 0.75 * clamp(P.damp, 0, 1); this.rvDirty = 0; }
 }
+// ---- (v10) MIX CARVE: the parts make room for each other, the way a mix engineer's dynamic EQ does --------------------------------
+// The audit (tools/mix_audit.cjs) found the drop crowded where the chords sit on everything: chords/lead, chords/arp, chords/pad and
+// bass/chords were the pairs most often loud in the same third-octave at the same moment (melodic techno 33 %, synthwave 47 % of
+// the mid band's energy masked). Each band below dips one part around the frequencies that matter for another part, ONLY while that
+// other part plays (its envelope, normalised to its own recent peak — level-independent, gated by its mute and energy): the lead
+// stays in front of the chords and the pad, the arp sits beside the chords, the bass's harmonics are not buried under the chords'
+// and the pad's low-mids. When the key part rests, the dipped part comes back whole. Depth × the deck's carve amount (0…1).
+//            part, Hz,   Q,  dB,   keys [part, weight]
+const CARVE = [[5, 1800, 0.7, -4.0, [[7, 1], [8, 0.8]]],          // chords under the lead (and the arp)
+  [6, 1500, 0.6, -5.0, [[7, 1], [8, 0.6], [5, 0.5]]],              // the pad under the lead, the arp and the chords
+  [5, 260, 0.8, -4.5, [[4, 1]]], [6, 230, 0.8, -5.0, [[4, 1]]],    // chords and pad: low-mids out of the bass's way
+  [5, 900, 0.8, -3.0, [[8, 1]]],                                   // the chords around the arp's body
+  [8, 2600, 0.9, -3.0, [[7, 1]]],                                  // the arp under the lead's presence
+  [5, 700, 0.8, -2.5, [[1, 0.9]]], [4, 210, 1.0, -3.0, [[1, 1]]],  // the snare's body through the chords and the bass (drum & bass, breaks)
+  [4, 90, 0.7, -4.0, [[0, 1]], 'ls']];                             // the bass's sub under each kick (a low shelf, quick): the kick's fundamental
+                                                                   // gets through, the bass keeps its body and growl — a split, not a duck
+const CARVE_KEYS = [0, 1, 4, 5, 7, 8], CARVE_REL = [0.06, 0.12, 0.15, 0.15, 0.15, 0.15, 0.15, 0.15, 0.15, 0.15, 0.15]; // release per key part (s): the kick's dip lets go quickly
+class MixCarve {
+  constructor(sr) { this.sr = sr; this.env = new Float32Array(NCH); this.pk = new Float32Array(NCH).fill(1e-3); this.dbg = new Float32Array(CARVE.length);
+    this.bands = CARVE.map(([c, f, q, db, keys, type]) => { const w = TAU * f / sr; return { c, cs: Math.cos(w), al: Math.sin(w) / (2 * q), db, keys, ls: type === 'ls', g: 0, z: new Float64Array(4) }; }); }
+  // M: the DeckMix (its channel buffers, strips and gains); amt: 0…1
+  block(M, n, amt) { const sr = this.sr, kA = 1 - Math.exp(-n / (0.003 * sr)), kP = Math.exp(-n / (2 * sr)), S = M.s;
+    for (const k of CARVE_KEYS) { const L = M.bufL[k], R = M.bufR[k]; let a = 0; for (let i = 0; i < n; i++) { const x = L[i] < 0 ? -L[i] : L[i], y = R[i] < 0 ? -R[i] : R[i]; if (x > a) a = x; if (y > a) a = y; }
+      const s = S[k], act = s.mute ? 0 : Math.min(1, s.gs / (s.g + 1e-9)); a *= act; this.env[k] += (a - this.env[k]) * (a > this.env[k] ? kA : 1 - Math.exp(-n / (CARVE_REL[k] * sr))); this.pk[k] = Math.max(1e-4, a, this.pk[k] * kP); }
+    for (let b = 0; b < this.bands.length; b++) { const B = this.bands[b]; let key = 0; for (const [k, w] of B.keys) { const v = w * this.env[k] / this.pk[k]; if (v > key) key = v; }
+      const tgt = B.db * amt * Math.min(1, key * 1.6), g0 = B.g, g1 = g0 + (tgt - g0) * (B.ls ? 0.6 : 0.3); B.g = g1; this.dbg[b] = g1; const z = B.z;
+      if (g0 > -0.02 && g1 > -0.02 && Math.abs(z[0]) + Math.abs(z[1]) + Math.abs(z[2]) + Math.abs(z[3]) < 1e-9) { z.fill(0); continue; } // flat and settled: nothing to do
+      const L = M.bufL[B.c], R = M.bufR[B.c], cs = B.cs, al = B.al; let z1l = z[0], z2l = z[1], z1r = z[2], z2r = z[3];
+      for (let i0 = 0; i0 < n; i0 += 32) { const g = g0 + (g1 - g0) * Math.min(1, (i0 + 32) / n), A = Math.pow(10, g / 40), e = Math.min(n, i0 + 32); let b0, b1, b2, a1, a2;
+        if (B.ls) { const sq = 2 * Math.sqrt(A) * al, a0 = (A + 1) + (A - 1) * cs + sq; b0 = A * ((A + 1) - (A - 1) * cs + sq) / a0; b1 = 2 * A * ((A - 1) - (A + 1) * cs) / a0; b2 = A * ((A + 1) - (A - 1) * cs - sq) / a0; a1 = -2 * ((A - 1) + (A + 1) * cs) / a0; a2 = ((A + 1) + (A - 1) * cs - sq) / a0; } // RBJ low shelf
+        else { const a0 = 1 + al / A; b0 = (1 + al * A) / a0; b1 = -2 * cs / a0; b2 = (1 - al * A) / a0; a1 = b1; a2 = (1 - al / A) / a0; } // RBJ peaking
+        for (let i = i0; i < e; i++) { const xl = L[i], yl = b0 * xl + z1l; z1l = b1 * xl - a1 * yl + z2l; z2l = b2 * xl - a2 * yl; L[i] = yl; const xr = R[i], yr = b0 * xr + z1r; z1r = b1 * xr - a1 * yr + z2r; z2r = b2 * xr - a2 * yr; R[i] = yr; } }
+      z[0] = z1l; z[1] = z2l; z[2] = z1r; z[3] = z2r; } } }
 class DeckMix {
   constructor(sr) { this.sr = sr; this.s = Array.from({ length: NCH }, () => new Strip()); this.bufL = Array.from({ length: NCH }, () => new Float32Array(128)); this.bufR = Array.from({ length: NCH }, () => new Float32Array(128));
-    this.scDepth = 0.4; this.bassDuck = 0; this.scLen = 1; this.scT = 1e9; this.scPend = -1; this.bpm = 124; this.pfxs = new Array(NCH).fill(null); /* (v10) a Beat FX unit per part, made on first use: an effect on the bass keeps running while you set one on the chords */ this.mangleP = new Array(NCH).fill(null); /* (v10) and a Mangle unit per part */ this.tfx = new DeckFX(sr); this.txg = new Float32Array(NCH).fill(1); this.ug = new Float32Array(NCH).fill(1); this.ul = new Float32Array(NCH).fill(1); this.hpMul = new Float32Array(NCH).fill(1); this.uTr = new Float32Array(NCH); this.uSat = new Float32Array(NCH); this.cfx = new DeckFX(sr); this.colorKind = 'filter'; this.drumComp = new Comp(sr); this.drumComp.set(-14, 2, 0.008, 0.12, 1); this.pumpA = new Float64Array(128); for (const k of ['adL', 'adR', 'abL', 'abR', 'amL', 'amR', 'hbL', 'hbR', 'arL', 'arR', 'asL', 'asR']) this[k] = new Float64Array(128); this.choHot = 0; this.eqHot = 0; /* (v9.1) the mixer's buses, summed in doubles */ this.heat = 1; this.punch = 1; this.eco = 0;
+    this.scDepth = 0.4; this.bassDuck = 0; this.scLen = 1; this.scT = 1e9; this.scPend = -1; this.bpm = 124; this.carve = 1; this.carver = new MixCarve(sr); /* (v10) the parts make room for each other */ this.pfxs = new Array(NCH).fill(null); /* (v10) a Beat FX unit per part, made on first use: an effect on the bass keeps running while you set one on the chords */ this.mangleP = new Array(NCH).fill(null); /* (v10) and a Mangle unit per part */ this.tfx = new DeckFX(sr); this.txg = new Float32Array(NCH).fill(1); this.ug = new Float32Array(NCH).fill(1); this.ul = new Float32Array(NCH).fill(1); this.hpMul = new Float32Array(NCH).fill(1); this.uTr = new Float32Array(NCH); this.uSat = new Float32Array(NCH); this.cfx = new DeckFX(sr); this.colorKind = 'filter'; this.drumComp = new Comp(sr); this.drumComp.set(-14, 2, 0.008, 0.12, 1); this.pumpA = new Float64Array(128); for (const k of ['adL', 'adR', 'abL', 'abR', 'amL', 'amR', 'hbL', 'hbR', 'arL', 'arR', 'asL', 'asR']) this[k] = new Float64Array(128); this.choHot = 0; this.eqHot = 0; /* (v9.1) the mixer's buses, summed in doubles */ this.heat = 1; this.punch = 1; this.eco = 0;
     this.eqLowL = new Biquad(); this.eqLowR = new Biquad(); this.eqMidL = new Biquad(); this.eqMidR = new Biquad(); this.eqHiL = new Biquad(); this.eqHiR = new Biquad(); this.filtL = new Svf(); this.filtR = new Svf();
     this.low = 0; this.mid = 0; this.high = 0; this.lowS = 0; this.midS = 0; this.highS = 0; this.filter = 0; this.filterS = 0; this.fader = 1; this.faderS = 1; this.user = 1; this.userS = 1; this.trimS = 1; this.autoHP = 0; this.revBoost = 1; this.trim = 1; this.throwT = 0; this.secDb = 0; this.secG = 1; this.secS = 1; this.secK = 0.0002; this.dfx = new DeckFX(sr); this.beat0 = 0; this.eg = new Float32Array(NCH).fill(1); this.tone = null; this.tq = [new Biquad(), new Biquad(), new Biquad(), new Biquad(), new Biquad(), new Biquad(), new Biquad(), new Biquad()]; this.sideHP = new Biquad(); this.wideG = 0;
     this.outL = new Float32Array(128); this.outR = new Float32Array(128); this.preL = new Float32Array(128); this.preR = new Float32Array(128); this.revL = new Float32Array(128); this.revR = new Float32Array(128); this.dlyL = new Float32Array(128); this.dlyR = new Float32Array(128);
@@ -158,7 +191,7 @@ class DeckMix {
   setHP(c, f) { const s = this.s[c]; if (Math.abs(f - s.hpF) < 0.5) return; s.hpF = f; if (f > 0) { s.hpL.set('hp', f, 0.707, 0, this.sr); s.hpR.set('hp', f, 0.707, 0, this.sr); } }
   setBalance(db, trimDb) { for (let c = 0; c < NCH; c++) this.s[c].g = dbToGain(db[c]); this.trim = dbToGain(trimDb || 0); }
   // Echo knob (mix.echo): 0…1 the return of what the score sends to the harmonic echo, 1…2 also sends the music parts in (it works on any track)
-  setSends(mix) { for (let c = 0; c < NCH; c++) { const s = this.s[c]; s.rev = 0; s.dly = 0; }
+  setSends(mix) { for (let c = 0; c < NCH; c++) { const s = this.s[c]; s.rev = 0; s.dly = 0; } this.carve = mix.carve != null ? clamp(mix.carve, 0, 1) : 1; // (v10) the mix carve: on unless the track says otherwise
     const v = mix.verb, d = mix.delay, dv = mix.drumVerb != null ? mix.drumVerb : 1; const S = this.s; S[1].rev = v * 0.9 * dv; S[2].rev = v * 0.3 * dv; S[3].rev = v * 0.7 * dv; /* drumVerb: the family's drums stay drier (dnb, breaks, techno, bass music) */ S[5].rev = v * 1.2; S[6].rev = v * 1.6; S[7].rev = v * 1.3; S[8].rev = v * 1.4; S[9].rev = v * 1.8; S[10].rev = v * 0.6;
     S[5].dly = d * 0.6; S[7].dly = d * 1.2; S[8].dly = d * 1.1; S[3].dly = d * 0.3; S[1].dly = d * 0.15; const ea = mix.echo != null ? mix.echo : 1;
     // (v9.2) bassDuck: the genres whose bass SUSTAINS under the kick (UKG, breakbeat, dubstep, afro house, DnB, deep house) duck the
@@ -203,6 +236,7 @@ class DeckMix {
     for (let c = 0; c < NCH; c++) { const G = this.mangleP[c]; if (!G || !G.hL) continue; G.bpm = this.bpm; G.mask = this.reso.mask; G.root = this.reso.root; G.block(this.bufL[c], this.bufR[c], n, this.beat0); } // (v10) MANGLE on every part that has a unit
     for (let c = 0; c < NCH; c++) { const X = this.pfxs[c]; if (!X || !X.active) continue; const bL = this.bufL[c], bR = this.bufR[c], b0 = this.beat0, bi = this.bpm / 60 / sr; X.bpm = this.bpm; for (let i = 0; i < n; i++) { X.run(bL[i], bR[i], b0 + i * bi); bL[i] = X.ol; bR[i] = X.or; } } // (v9.3) Beat FX on a part — (v10) on every part that has one
     for (let c = 0; c < NCH; c++) S[c].block(this.bufL[c], this.bufR[c], n);
+    if (this.carve > 0) this.carver.block(this, n, this.carve); // (v10) MIX CARVE: after the strips, before the faders and sends
     // (v9.1) CHANNEL-MAJOR: each channel in one pass over the block — its gain, duck, sends and bus in locals — into buses summed in
     // doubles in the same order as before (channel by channel), so the result is the same; a silent channel costs one comparison
     // per sample. Before, every sample walked all 11 channels re-reading a dozen fields of each: the mixer was a third of the engine.

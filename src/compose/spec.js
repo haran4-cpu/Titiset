@@ -132,7 +132,7 @@ function validateSpec(spec) {
       if (!isObj(v)) { err(`sound.${slot}`, 'must be an object of parameters'); continue; } for (const [k, x] of Object.entries(v)) { if (k === 'preset') { if (typeof x !== 'string' || !presetKit(slot, x)) err(`sound.${slot}.preset`, `unknown ${slot} preset "${x}"`, 'one of: ' + Object.keys(SOUND_BANK[slot] || {}).join(', ')); } else if (k === 'model') { if (!MODEL.hasOwnProperty(x)) err(`sound.${slot}.model`, `unknown model "${x}"`, 'one of: ' + Object.keys(MODEL).join(', ')); }
         else if (k === 'kind' || k === 'vowel') { if (typeof x !== 'string') err(`sound.${slot}.${k}`, 'must be a string'); } else if (!isNum(x)) err(`sound.${slot}.${k}`, 'must be a number'); } } }
   if (spec.length != null && !['radio', 'club', 'extended', 'classic'].includes(spec.length)) err('length', `unknown length "${spec.length}"`, 'radio, club or extended'); // (v9.4) the form's length when no form is written
-  if (spec.mix != null) { if (!isObj(spec.mix)) err('mix', 'must be an object'); else { const R = { lufs: [-20, -5], verb: [0, 1], delay: [0, 1], sidechain: [0, 0.9], heat: [0, 2], punch: [0, 2], echo: [0, 2] };
+  if (spec.mix != null) { if (!isObj(spec.mix)) err('mix', 'must be an object'); else { const R = { lufs: [-20, -5], verb: [0, 1], delay: [0, 1], sidechain: [0, 0.9], heat: [0, 2], punch: [0, 2], echo: [0, 2], carve: [0, 1] };
     for (const [k, v] of Object.entries(spec.mix)) { if (!R[k]) err(`mix.${k}`, 'unknown mix field', 'lufs, verb, delay, echo, sidechain, heat, punch'); else if (!isNum(v) || v < R[k][0] || v > R[k][1]) err(`mix.${k}`, `must be ${R[k][0]}…${R[k][1]}`); } } }
   return { ok: E.length === 0, errors: E, warnings: W };
   function lintMelody(path, bars, S, spec, G) { // musical lint: out-of-key notes, unusual range (warnings, never errors: chromatic notes are legal)
@@ -186,7 +186,7 @@ function deriveContract(spec) {
     if (pre && (k === 'snare' || k === 'hats' || k === 'perc')) slot[k].synth = 1; // (v9.3) a drum sound chosen from the bank is a synthesized voice: that part leaves the kit family
     const rest = Object.assign({}, v); delete rest.preset; delete rest.vary; Object.assign(slot[k], rest); if (v.vary != null && SOUND_CENTER[k]) varyKit(slot[k], v.vary); // (v9.4) this track's cut of the preset
     if (pre || (SOUND_CENTER[k] && TIMBRE_KEYS.some((t) => v[t] != null))) { slot[k].gain = v.gain != null ? v.gain : k === 'perc' && pre && pre.gain != null ? pre.gain : base.gain != null ? base.gain : 1; names.match.push({ slot: k, base, preset: v.preset && Object.keys(v).filter((q) => q !== 'vary').length === 1 ? v.preset : null }); } } // level matched in context after composing (compileSpec)
-  const M = spec.mix || {}; if (M.lufs != null) G.mix.lufs = M.lufs; if (M.verb != null) G.mix.verb = M.verb; if (M.delay != null) G.mix.delay = M.delay; if (M.sidechain != null) G.mix.sc = M.sidechain; if (M.heat != null) G.mix.heat = M.heat; if (M.punch != null) G.mix.punch = M.punch; if (M.echo != null) G.mix.echo = M.echo;
+  const M = spec.mix || {}; if (M.lufs != null) G.mix.lufs = M.lufs; if (M.verb != null) G.mix.verb = M.verb; if (M.delay != null) G.mix.delay = M.delay; if (M.sidechain != null) G.mix.sc = M.sidechain; if (M.heat != null) G.mix.heat = M.heat; if (M.punch != null) G.mix.punch = M.punch; if (M.echo != null) G.mix.echo = M.echo; if (M.carve != null) G.mix.carve = M.carve; /* (v10) the mix carve */
   return { G, names };
 }
 function compileSpec(spec, opts) {
@@ -286,7 +286,7 @@ function exportSpec(score, opt) {
     if (own && own.melody && opt.melody !== false) f.melody = own.melody; else if (opt.melody === true && G.lead && G.lead.role === 'hook') { const mel = sectionMelody(score, s); if (mel) f.melody = mel; } return f; });
   // explicit layer objects (custom) cannot be named: copy them
   score.sections.forEach((s, i) => { if (s.layer === 'custom' && score.spec && score.spec.form && score.spec.form[i]) spec.form[i].layer = score.spec.form[i].layer; });
-  spec.mix = { lufs: G.mix.lufs, verb: G.mix.verb, delay: G.mix.delay, sidechain: G.mix.sc, heat: G.mix.heat != null ? G.mix.heat : 1, punch: G.mix.punch != null ? G.mix.punch : 1 }; if (G.mix.echo != null) spec.mix.echo = G.mix.echo;
+  spec.mix = { lufs: G.mix.lufs, verb: G.mix.verb, delay: G.mix.delay, sidechain: G.mix.sc, heat: G.mix.heat != null ? G.mix.heat : 1, punch: G.mix.punch != null ? G.mix.punch : 1 }; if (G.mix.echo != null) spec.mix.echo = G.mix.echo; if (G.mix.carve != null) spec.mix.carve = G.mix.carve;
   if (score.spec && score.spec.sound) spec.sound = JSON.parse(JSON.stringify(score.spec.sound));
   if (score.spec && score.spec.form) score.spec.form.forEach((f, i) => { if (!spec.form[i]) return; for (const k of ['drums', 'bass', 'progression', 'barsPerChord', 'level']) if (f[k] != null) spec.form[i][k] = f[k]; });
   return spec;

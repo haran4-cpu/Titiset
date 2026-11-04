@@ -13,6 +13,7 @@ function renderTrack(gid, seed, o) {
   const L = new Float32Array(N), R = new Float32Array(N), bl = new Float32Array(128), br = new Float32Array(128);
   const stems = o.stems ? Array.from({ length: 11 }, () => new Float32Array(N * 2)) : null; const cap = o.stems ? Array.from({ length: 11 }, () => new Float32Array(256)) : null;
   if (o.chanOn) for (let c = 0; c < 11; c++) deck.chanOn[c] = o.chanOn[c];
+  if (o.carve != null) deck.mix.carve = o.carve; // (v10) the mix carve amount (0 = the 9.5 mix)
   let done = -preN; const t0 = Date.now();
   while (done < N) { const n = 128; deck.mix.cap = stems && done >= 0 ? cap : null; deck.process(n); M.run([deck.mix], 1, bl, br, n);
     for (let i = 0; i < n; i++) { const k = done + i; if (k >= 0 && k < N) { L[k] = bl[i]; R[k] = br[i]; if (stems) for (let c = 0; c < 11; c++) { stems[c][2 * k] = cap[c][2 * i]; stems[c][2 * k + 1] = cap[c][2 * i + 1]; } } }
