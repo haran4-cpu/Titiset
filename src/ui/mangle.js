@@ -1,4 +1,4 @@
-/* ===================== FORGE · MANGLE panel (v9.5) =====================
+/* ===================== DJ TiTo · MANGLE panel (v9.5; v10: a unit per part) =====================
    The FX screen's sound-design unit (src/engine/06d_mangle.js): two slots, A and B, each one of eight engines with its Macro, three
    knobs and a choice; a Morph between them; a touch pad that plays the selected slot while it is held (left–right the Macro, up–down
    the first knob); recipes to start from; Dice; and "Keep in track", which writes the unit's state into the track (spec.fx.mangle):
@@ -23,25 +23,36 @@ const MG_RECIPES = [
   ['Talkbox', { mode: 'vowel', sub: 2, macro: 0.3, a: 0.6, b: 0.6, c: 0.5 }, 7], ['Yoy bass', { mode: 'vowel', sub: 3, macro: 0.5, a: 0.8, b: 0.7, c: 0.6 }, 4],
   ['Key crush', { mode: 'fold', sub: 2, macro: 0.5, a: 0.4, b: 0.7, c: 0.6 }], ['Melt', { mode: 'fold', sub: 1, macro: 0.75, a: 0.8, b: 0.4, c: 0.45 }]];
 const mgSlotDef = (mode) => ({ on: false, mode, sub: 1, macro: 0.5, a: 0.5, b: 0.5, c: 0.5, hold: 1 });
-function mgOf(i) { const D = decks[i]; if (!D.mg) { D.mg = { sel: 0, target: -1, morph: 0.5, wet: 1, s: [mgSlotDef('slice'), mgSlotDef('spectral')] }; const fav = tasteFav('mangle:'), R = fav && MG_RECIPES.find((x) => x[0] === fav); if (R) Object.assign(D.mg.s[0], R[1], { on: false }); } return D.mg; } // (v9.5) slot A starts on the recipe you use most
-function mgSendSlot(i, q) { const G = mgOf(i), S = G.s[q]; send({ type: 'mangle', deck: i, slot: q, on: S.on, mode: MG_MODES.indexOf(S.mode), sub: S.sub, macro: S.macro, a: S.a, b: S.b, c: S.c, hold: S.hold }); }
-function mgSendAll(i) { const G = mgOf(i); send({ type: 'mangle', deck: i, target: G.target, morph: G.morph, wet: G.wet }); mgSendSlot(i, 0); mgSendSlot(i, 1); }
+// (v10) the deck and every part have their own unit (D.mgU[target]); "On" picks the unit you edit — the others keep playing
+function mgUnit(i, t) { const D = decks[i]; if (!D.mgU) D.mgU = {}; if (!D.mgU[t]) { const G = { sel: 0, target: t, morph: 0.5, wet: 1, s: [mgSlotDef('slice'), mgSlotDef('spectral')] }; const fav = tasteFav('mangle:'), R = fav && MG_RECIPES.find((x) => x[0] === fav); if (R) Object.assign(G.s[0], R[1], { on: false }); D.mgU[t] = G; } return D.mgU[t]; }
+function mgOf(i) { const D = decks[i]; if (D.mgT == null) D.mgT = -1; return mgUnit(i, D.mgT); } // (v9.5) slot A starts on the recipe you use most
+const mgLit = (G) => !!(G && (G.s[0].on || G.s[1].on));
+function mgSendSlot(i, q, G) { G = G || mgOf(i); const S = G.s[q]; send({ type: 'mangle', deck: i, unit: G.target, slot: q, on: S.on, mode: MG_MODES.indexOf(S.mode), sub: S.sub, macro: S.macro, a: S.a, b: S.b, c: S.c, hold: S.hold }); }
+function mgSendAll(i, G) { G = G || mgOf(i); send({ type: 'mangle', deck: i, unit: G.target, morph: G.morph, wet: G.wet }); mgSendSlot(i, 0, G); mgSendSlot(i, 1, G); }
+// every unit of a deck off (Safe, and the panel's All off)
+function mgAllOff(i) { const D = decks[i]; for (const t in D.mgU || {}) { const G = D.mgU[t]; for (let q = 0; q < 2; q++) if (G.s[q].on) { G.s[q].on = false; mgSendSlot(i, q, G); } } if (i === SHELL.fxDeck) renderMangle(); }
 // a state written by a person, an AI or an older file: every field checked, anything else left out
 function mgClean(x) { if (!x || typeof x !== 'object') return null; const n = (v, d) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : d), out = { target: -1, morph: 0.5, wet: 1, s: [] };
   if (Number.isInteger(x.target) && x.target >= -1 && x.target <= 8) out.target = x.target; out.morph = n(x.morph, 0.5); out.wet = n(x.wet, 1);
   for (let q = 0; q < 2; q++) { const s = Array.isArray(x.s) ? x.s[q] : null, d = mgSlotDef(q ? 'spectral' : 'slice'); if (s && typeof s === 'object') { d.on = !!s.on; if (MG_MODES.includes(s.mode)) d.mode = s.mode; d.sub = Number.isInteger(s.sub) && s.sub >= 0 && s.sub <= 3 ? s.sub : 1; for (const k of ['macro', 'a', 'b', 'c', 'hold']) d[k] = n(s[k], d[k]); } out.s.push(d); }
   return out; }
 // a track that carries a Mangle state brings it with it (installScore); a track without one leaves the unit off
-function mgFromTrack(i, s) { const D = decks[i], x = s && s.spec && s.spec.fx ? mgClean(s.spec.fx.mangle) : null; if (x) { D.mg = Object.assign({ sel: 0 }, x); if (D.spec) D.spec.fx = { mangle: mgSnapshot(i) }; } else if (D.mg) { D.mg.s[0].on = false; D.mg.s[1].on = false; }
-  if (D.mg) mgSendAll(i); if (i === SHELL.fxDeck) renderMangle(); } // (the panel shows one deck: a load on the other one leaves it alone)
+// (v10) a track keeps every unit that was set (spec.fx.mangles), and the first one also as spec.fx.mangle (the 9.5 form, which still loads)
+function mgFromTrack(i, s) { const D = decks[i], fx = s && s.spec && s.spec.fx, list = fx ? (Array.isArray(fx.mangles) ? fx.mangles : fx.mangle ? [fx.mangle] : []).map(mgClean).filter(Boolean) : [];
+  for (const t in D.mgU || {}) { const G = D.mgU[t]; for (let q = 0; q < 2; q++) if (G.s[q].on) { G.s[q].on = false; mgSendSlot(i, q, G); } }
+  if (list.length) { D.mgU = D.mgU || {}; for (const x of list) { D.mgU[x.target] = Object.assign({ sel: 0 }, x); mgSendAll(i, D.mgU[x.target]); } D.mgT = list[0].target; if (D.spec) D.spec.fx = mgKeepFx(i); }
+  if (i === SHELL.fxDeck) renderMangle(); } // (the panel shows one deck: a load on the other one leaves it alone)
+function mgKeepFx(i) { const D = decks[i], all = Object.values(D.mgU || {}).filter((G) => mgLit(G) || G.target === D.mgT).map(mgSnap); const cur = all.find((x) => x.target === D.mgT) || all[0]; return cur ? { mangle: cur, mangles: all } : {}; } // (the panel shows one deck: a load on the other one leaves it alone)
 // the pad's dot placed in percent of the pad: no layout read (9.5.0 measured the pad on every track load — a forced layout, 93 ms on a slow machine)
 function mgDot(pad, x, y) { const d = $('.xpad-dot', pad); d.style.left = `calc(${(x * 100).toFixed(1)}% - 11px)`; d.style.top = `calc(${((1 - y) * 100).toFixed(1)}% - 11px)`; }
-function mgSnapshot(i) { const G = mgOf(i); return { target: G.target, morph: G.morph, wet: G.wet, s: G.s.map((S) => Object.assign({}, S)) }; }
+function mgSnap(G) { return { target: G.target, morph: G.morph, wet: G.wet, s: G.s.map((S) => Object.assign({}, S)) }; }
+function mgSnapshot(i) { return mgSnap(mgOf(i)); }
 function buildMangle(el) {
   el.innerHTML = `<h4>Mangle — sound design on deck <span class="os-d">A</span></h4>
   <div class="mg-head"><div class="seg mg-slots" role="group" aria-label="Slot"><button data-mgs="0">A <i class="mg-led"></i></button><button data-mgs="1">B <i class="mg-led"></i></button></div>
-    <label class="mg-tgt"><span class="lbl">On</span><select class="btn mg-target" aria-label="What Mangle is on">${MG_TARGETS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></label>
+    
     <button class="bfx-on big mg-on" aria-pressed="false">A OFF</button></div>
+  <div class="dk-chips tgt-chips mg-tgts" role="group" aria-label="What Mangle is on — each part keeps its own unit">${MG_TARGETS.map(([v, l]) => `<button class="dk-chip" data-mt="${v}">${l}<i class="tgt-led"></i></button>`).join('')}</div>
   <div class="dk-chips mg-modes" role="group" aria-label="Engine">${MG_MODES.map((m) => `<button class="dk-chip" data-mgm="${m}">${MG_LABEL[m]}</button>`).join('')}</div>
   <p class="mg-desc"></p><div class="seg mg-sub" role="group" aria-label="Choice"></div>
   <div class="mg-play"><div class="xpad mg-pad" role="slider" aria-label="Touch pad: hold to play, left–right the Macro, up–down the first knob" tabindex="0"><i class="xpad-dot"></i><span class="xpad-l mg-px">Macro →</span><span class="xpad-d mg-py">↑</span></div>
@@ -54,18 +65,20 @@ function buildMangle(el) {
   const cur = () => { const i = SHELL.fxDeck, G = mgOf(i); return { i, G, q: G.sel, S: G.s[G.sel] }; };
   const live = async (fn, full) => { const c = cur(); fn(c); if (c.S.on || full) { await startAudio(); mgSendSlot(c.i, c.q); } renderMangle(); };
   $$('[data-mgs]', el).forEach((b) => b.onclick = () => { mgOf(SHELL.fxDeck).sel = +b.dataset.mgs; renderMangle(); });
-  $('.mg-target', el).onchange = async (e) => { const { i, G } = cur(); G.target = +e.target.value; await startAudio(); send({ type: 'mangle', deck: i, target: G.target }); renderMangle(); };
+  $$('[data-mt]', el).forEach((b) => b.onclick = () => { decks[SHELL.fxDeck].mgT = +b.dataset.mt; renderMangle(); });
   $('.mg-on', el).onclick = () => live((c) => { c.S.on = !c.S.on; }, true);
   $$('[data-mgm]', el).forEach((b) => b.onclick = () => live((c) => { if (c.S.mode !== b.dataset.mgm) { c.S.mode = b.dataset.mgm; c.S.sub = 1; } }));
   el.querySelector('.mg-sub').onclick = (e) => { const b = e.target.closest('[data-mgc]'); if (b) live((c) => { c.S.sub = +b.dataset.mgc; }); };
   $$('[data-mgk]', el).forEach((r) => r.oninput = () => { const c = cur(); c.S[r.dataset.mgk] = +r.value; if (c.S.on) mgSendSlot(c.i, c.q); });
   $('.mg-hold', el).onclick = () => live((c) => { c.S.hold = c.S.hold ? 0 : 1; });
-  $$('[data-mgx]', el).forEach((r) => r.oninput = () => { const { i, G } = cur(); G[r.dataset.mgx] = +r.value; send({ type: 'mangle', deck: i, [r.dataset.mgx]: G[r.dataset.mgx] }); });
-  $$('[data-mgr]', el).forEach((b) => b.onclick = async () => { const [name, p, tgt] = MG_RECIPES[+b.dataset.mgr], c = cur(); Object.assign(c.S, p, { on: true }); tasteFx('mangle:' + name); await startAudio();
-    if (tgt != null && c.G.target === -1) { c.G.target = tgt; send({ type: 'mangle', deck: c.i, target: tgt }); toast(`${name} — on the ${MG_TARGETS.find((x) => x[0] === tgt)[1].toLowerCase()} (change it under On)`); } mgSendSlot(c.i, c.q); renderMangle(); });
+  $$('[data-mgx]', el).forEach((r) => r.oninput = () => { const { i, G } = cur(); G[r.dataset.mgx] = +r.value; send({ type: 'mangle', deck: i, unit: G.target, [r.dataset.mgx]: G[r.dataset.mgx] }); });
+  $$('[data-mgr]', el).forEach((b) => b.onclick = async () => { const [name, p, tgt] = MG_RECIPES[+b.dataset.mgr], i = SHELL.fxDeck, D = decks[i]; tasteFx('mangle:' + name); await startAudio();
+    // a recipe that belongs on one part goes there (when the deck is the unit being edited): the deck's own unit is left as it was
+    if (tgt != null && mgOf(i).target === -1) { D.mgT = tgt; const G = mgOf(i); Object.assign(G.s[G.sel], p, { on: true }); mgSendAll(i, G); toast(`${name} — on the ${MG_TARGETS.find((x) => x[0] === tgt)[1].toLowerCase()} (pick another part above to put it elsewhere)`); renderMangle(); return; }
+    const c = cur(); Object.assign(c.S, p, { on: true }); mgSendSlot(c.i, c.q); renderMangle(); });
   $('[data-mgdice]', el).onclick = () => live((c) => { const r = Math.random; c.S.sub = Math.floor(r() * 4); c.S.macro = 0.3 + 0.6 * r(); c.S.a = r(); c.S.b = 0.2 + 0.7 * r(); c.S.c = r() * 0.8; });
-  $('[data-mgkeep]', el).onclick = () => { const i = SHELL.fxDeck, D = decks[i]; if (!D.spec) { toast(`Deck ${'AB'[i]} is empty`); return; } D.spec.fx = { mangle: mgSnapshot(i) }; if (D.score && D.score.spec) D.score.spec.fx = D.spec.fx; toast('Mangle kept in the track — saved with it, back when it is loaded'); renderMangle(); };
-  $('[data-mgoff]', el).onclick = () => { const i = SHELL.fxDeck, G = mgOf(i); G.s[0].on = false; G.s[1].on = false; mgSendSlot(i, 0); mgSendSlot(i, 1); renderMangle(); };
+  $('[data-mgkeep]', el).onclick = () => { const i = SHELL.fxDeck, D = decks[i]; if (!D.spec) { toast(`Deck ${'AB'[i]} is empty`); return; } D.spec.fx = mgKeepFx(i); if (D.score && D.score.spec) D.score.spec.fx = D.spec.fx; toast('Mangle kept in the track — saved with it, back when it is loaded'); renderMangle(); };
+  $('[data-mgoff]', el).onclick = () => mgAllOff(SHELL.fxDeck);
   // the touch pad: the selected slot plays while it is held (unless it is on already); x = Macro, y = the first knob
   const pad = $('.mg-pad', el); let held = false, was = false;
   const at = (e) => { const r = pad.getBoundingClientRect(), x = clamp((e.clientX - r.left) / r.width, 0, 1), y = clamp(1 - (e.clientY - r.top) / r.height, 0, 1), c = cur(); c.S.macro = Math.round(x * 100) / 100; c.S.a = Math.round(y * 100) / 100; mgDot(pad, x, y); return c; };
@@ -80,7 +93,8 @@ function renderMangle(light) { const el = $('.mangle'); if (!el) return; const i
   for (const r of $$('[data-mgk]', el)) if (document.activeElement !== r) r.value = S[r.dataset.mgk]; for (const r of $$('[data-mgx]', el)) if (document.activeElement !== r) r.value = G[r.dataset.mgx];
   if (light) return;
   $$('[data-mgm]', el).forEach((b) => { const sel = b.dataset.mgm === S.mode; b.classList.toggle('on', sel); b.setAttribute('aria-pressed', sel ? 'true' : 'false'); });
-  $('.mg-target', el).value = String(G.target); setText($('.mg-desc', el), MG_DESC[S.mode]);
+  { const D = decks[i]; $$('[data-mt]', el).forEach((b) => { const t = +b.dataset.mt, sel = t === G.target; b.classList.toggle('on', sel); b.setAttribute('aria-pressed', sel ? 'true' : 'false'); $('.tgt-led', b).classList.toggle('lit', mgLit(D.mgU && D.mgU[t])); }); }
+  setText($('.mg-desc', el), MG_DESC[S.mode]);
   $('.mg-sub', el).innerHTML = spec[4].map((l, k) => `<button data-mgc="${k}" class="${S.sub === k ? 'on' : ''}" aria-pressed="${S.sub === k ? 'true' : 'false'}">${l}</button>`).join('');
   setText($('[data-mgl="macro"]', el), spec[0]); setText($('[data-mgl="a"]', el), spec[1]); setText($('[data-mgl="b"]', el), spec[2]); setText($('[data-mgl="c"]', el), spec[3]); setText($('.mg-px', el), `${spec[0]} →`); setText($('.mg-py', el), `${spec[1]} ↑`);
   const h = $('.mg-hold', el); h.hidden = !spec[5]; h.textContent = spec[5] || 'Hold'; h.classList.toggle('on', !!S.hold); h.setAttribute('aria-pressed', S.hold ? 'true' : 'false');

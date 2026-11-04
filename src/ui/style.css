@@ -632,3 +632,7 @@ body.shell { height: 100vh; height: 100dvh; overflow: hidden; padding-bottom: 0 
 .ts-chip button:hover, .ts-chip button:focus-visible { background: var(--line2); color: var(--text); }
 .taste input[type=checkbox] { width: 16px; height: 16px; }
 @media (max-width: 560px) { .ts-row { grid-template-columns: 1fr; } }
+/* (v10) part chips on the FX screen: the one you edit is selected; a lit dot = that part has effects running (each part keeps its own) */
+.tgt-chips { margin: 8px 0 4px; } .tgt-chips .dk-chip { display: inline-flex; align-items: center; gap: 6px; }
+.tgt-led { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--line2); } .tgt-led.lit { background: var(--a); box-shadow: 0 0 6px var(--a); }
+.tgt-chips .dk-chip:disabled { opacity: .4; }

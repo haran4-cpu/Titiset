@@ -15,13 +15,20 @@ const FX_TARGETS = [[-1, 'Whole deck'], [0, 'Kick'], [1, 'Snare'], [2, 'Hats'], 
 const BFX_PARAMS = { delay: [['fb', 'Feedback', 0, 0.95], ['tone', 'Tone', -1, 1], ['wob', 'Wobble', 0, 1], ['pp', 'Ping-pong', 'toggle']], reverb: [['size', 'Size', 0, 1], ['damp', 'Damping', 0, 1], ['pre', 'Pre-delay', 0, 0.1], ['freeze', 'Freeze', 'toggle']],
   filter: [['type', 'Type', ['LP', 'HP', 'BP']], ['res', 'Resonance', 0, 1]] };
 const BFX_PDEF = { fb: 0.55, tone: 0, wob: 0, pp: 1, size: 0.6, damp: 0.4, pre: 0.02, freeze: 0, type: 0, res: 0.6 };
-function bfxOf(i) { const D = decks[i]; if (!D.bfx) { D.bfx = { sel: (tasteFav('beat:') && BEAT_FX_BY[tasteFav('beat:')]) ? tasteFav('beat:') : 'delay', target: -1, q: true, latch: true, fx: {} }; for (const [id] of BEAT_FX) D.bfx.fx[id] = { on: false, amt: id === 'reverb' ? 0.45 : 0.6, beat: BEAT_DEF[id] ?? 3, p: Object.assign({}, BFX_PDEF) }; } return D.bfx; }
-// one message to the engine for one effect of one deck
-function bfxSend(i, id, extra) { const B = bfxOf(i), F = B.fx[id], E = BEAT_FX_BY[id]; const m = { type: 'fx', deck: i, name: E[2], on: F.on, amt: F.amt };
-  if (E[2] !== 'repeat' && E[2] !== 'tape') { if (E[3]) m.beat = F.beat; m.p = F.p; m.q = !!(B.q && extra !== 'now'); if (B.target >= 0) m.ch = B.target; }
+// (v10) every target — the whole deck and each part — has its own effects: switching the part you edit leaves the others playing.
+// Repeat and Tape act on the whole deck only (the motion insert), so every part's map shares the deck's two.
+const BFX_DECK_ONLY = new Set(['repeat', 'tape']);
+function bfxMap(B, t) { if (!B.maps[t]) { const m = {}; for (const [id, , name] of BEAT_FX) m[id] = t !== -1 && BFX_DECK_ONLY.has(name) && B.maps[-1] ? B.maps[-1][id] : { on: false, amt: id === 'reverb' ? 0.45 : 0.6, beat: BEAT_DEF[id] ?? 3, p: Object.assign({}, BFX_PDEF) }; B.maps[t] = m; } return B.maps[t]; }
+function bfxOf(i) { const D = decks[i]; if (!D.bfx) { D.bfx = { sel: (tasteFav('beat:') && BEAT_FX_BY[tasteFav('beat:')]) ? tasteFav('beat:') : 'delay', target: -1, q: true, latch: true, maps: {} }; bfxMap(D.bfx, -1); D.bfx.fx = D.bfx.maps[-1]; } return D.bfx; }
+const bfxLit = (B, t) => { const m = B.maps[t]; if (!m) return false; for (const [id, , name] of BEAT_FX) if (m[id].on && (t === -1 || !BFX_DECK_ONLY.has(name))) return true; return false; };
+// one message to the engine for one effect of one deck (t: the target, the edited one by default)
+function bfxSend(i, id, extra, t) { const B = bfxOf(i), T = t == null ? B.target : t, F = bfxMap(B, T)[id], E = BEAT_FX_BY[id]; const m = { type: 'fx', deck: i, name: E[2], on: F.on, amt: F.amt };
+  if (E[2] !== 'repeat' && E[2] !== 'tape') { if (E[3]) m.beat = F.beat; m.p = F.p; m.q = !!(B.q && extra !== 'now'); if (T >= 0) m.ch = T; }
   send(m); }
 function bfxToggle(i, id, on) { const B = bfxOf(i), F = B.fx[id]; F.on = on == null ? !F.on : !!on; if (F.on) tasteFx('beat:' + id); bfxSend(i, id); renderBeatFx(); }
-function bfxTarget(i, t) { const B = bfxOf(i); if (t === B.target) return; for (const [id] of BEAT_FX) if (B.fx[id].on) { B.fx[id].on = false; bfxSend(i, id, 'now'); } B.target = t; renderBeatFx(); }
+function bfxTarget(i, t) { const B = bfxOf(i); if (t === B.target) return; B.target = t; B.fx = bfxMap(B, t); renderBeatFx(); }
+// every Beat FX of a deck off, on every target (Safe, and the panel's All off)
+function bfxAllOff(i) { const B = bfxOf(i); for (const t in B.maps) for (const [id] of BEAT_FX) { const F = B.maps[t][id]; if (F.on) { F.on = false; bfxSend(i, id, 'now', +t); } } renderBeatFx(); }
 // ---- the shell ----
 function buildShell() { const app = $('.app'), con = $('.console'); if (!app || !con || $('.screens')) return;
   const sc = document.createElement('div'); sc.className = 'screens'; sc.setAttribute('aria-label', 'Screens');
@@ -70,7 +77,8 @@ function renderTabs() { $$('.tabbar [data-go]').forEach((b) => { const on = b.da
 // ---- Beat FX panel ----
 function buildBeatFx(el) {
   el.innerHTML = `<div class="bfx-head"><div class="seg bfx-deck" role="group" aria-label="Deck for the effects"><button data-bd="0">Deck A</button><button data-bd="1">Deck B</button></div>
-      <label class="bfx-tgt"><span class="lbl">On</span><select class="btn bfx-target" aria-label="What the effect is on">${FX_TARGETS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></label></div>
+      <button class="btn bfx-alloff" title="Every Beat FX of this deck off, on every part">All off</button></div>
+    <div class="dk-chips tgt-chips bfx-tgts" role="group" aria-label="What the effect is on — each part keeps its own effects">${FX_TARGETS.map(([v, l]) => `<button class="dk-chip" data-bt="${v}">${l}<i class="tgt-led"></i></button>`).join('')}</div>
     <div class="bfx-grid" role="group" aria-label="Effect">${BEAT_FX.map(([id, l]) => `<button data-fx="${id}">${l}</button>`).join('')}</div>
     <div class="bfx-beats seg" role="group" aria-label="Beat">${BEAT_OPTS.map(([v, l]) => `<button data-beat="${v}">${l}</button>`).join('')}</div>
     <div class="bfx-play"><div class="xpad" role="slider" aria-label="X-Pad: left–right Beat, up–down Depth" tabindex="0"><i class="xpad-dot"></i><span class="xpad-l">Beat →</span><span class="xpad-d">Depth ↑</span></div>
@@ -78,7 +86,7 @@ function buildBeatFx(el) {
         <button class="bfx-q" aria-pressed="true" title="Switch on the next beat">Quantize</button><button class="bfx-on big" aria-pressed="false">FX ON</button></div></div>
     <div class="bfx-params"></div>`;
   $$('[data-bd]', el).forEach((b) => b.onclick = () => { SHELL.fxDeck = +b.dataset.bd; renderBeatFx(); $$('.os-d').forEach((d) => { d.textContent = 'AB'[SHELL.fxDeck]; }); renderRisers(); renderMangle(); });
-  $('.bfx-target', el).onchange = (e) => bfxTarget(SHELL.fxDeck, +e.target.value);
+  $$('[data-bt]', el).forEach((b) => b.onclick = () => bfxTarget(SHELL.fxDeck, +b.dataset.bt)); $('.bfx-alloff', el).onclick = () => bfxAllOff(SHELL.fxDeck);
   $$('[data-fx]', el).forEach((b) => b.onclick = () => { bfxOf(SHELL.fxDeck).sel = b.dataset.fx; renderBeatFx(); });
   $$('[data-beat]', el).forEach((b) => b.onclick = () => { const i = SHELL.fxDeck, B = bfxOf(i), F = B.fx[B.sel]; F.beat = +b.dataset.beat; if (F.on) bfxSend(i, B.sel, 'now'); renderBeatFx(); });
   $('.bfx-depth', el).oninput = (e) => { const i = SHELL.fxDeck, B = bfxOf(i), F = B.fx[B.sel]; F.amt = +e.target.value; if (F.on) bfxSend(i, B.sel, 'now'); };
@@ -96,7 +104,7 @@ function renderBeatFx(light) { const el = $('.bfx'); if (!el) return; const i = 
   $$('[data-fx]', el).forEach((b) => { b.classList.toggle('sel', b.dataset.fx === B.sel); b.classList.toggle('lit', B.fx[b.dataset.fx].on); b.setAttribute('aria-pressed', b.dataset.fx === B.sel ? 'true' : 'false'); });
   $$('[data-beat]', el).forEach((b) => { b.classList.toggle('on', +b.dataset.beat === F.beat); b.disabled = !E[3]; });
   const dp = $('.bfx-depth', el); if (document.activeElement !== dp) dp.value = F.amt; const on = $('.bfx-on', el); on.classList.toggle('lit', F.on); on.setAttribute('aria-pressed', F.on ? 'true' : 'false'); on.textContent = F.on ? `${E[1]} ON` : `${E[1]} OFF`;
-  const q = $('.bfx-q', el); q.classList.toggle('on', B.q); q.setAttribute('aria-pressed', B.q ? 'true' : 'false'); $('.bfx-target', el).value = String(B.target); $('.bfx-target', el).disabled = E[2] === 'repeat' || E[2] === 'tape';
+  const q = $('.bfx-q', el); q.classList.toggle('on', B.q); q.setAttribute('aria-pressed', B.q ? 'true' : 'false'); { const deckOnly = E[2] === 'repeat' || E[2] === 'tape'; $$('[data-bt]', el).forEach((b) => { const t = +b.dataset.bt, sel = t === B.target; b.classList.toggle('on', sel); b.setAttribute('aria-pressed', sel ? 'true' : 'false'); $('.tgt-led', b).classList.toggle('lit', bfxLit(B, t)); b.disabled = deckOnly && t !== -1; }); }
   if (light) return;
   // the selected effect's own parameters (always the same three slots: an effect without them shows them disabled — no layout jump)
   const P = BFX_PARAMS[B.sel] || [], box = $('.bfx-params', el); box.innerHTML = [0, 1, 2, 3].map((k) => { const d = P[k]; if (!d) return '<span class="bfx-p off"></span>';

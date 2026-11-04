@@ -91,7 +91,7 @@ function buildAuto() { for (let i = 0; i < 2; i++) { const el = deckEl(i), parts
 // SAFE (Esc, header button): the panic button for a live set — every performance FX off, filters centred, loops released,
 // pending jumps cancelled, Auto paused on both decks, energy back to the middle. The music keeps playing, untouched otherwise.
 function safeAll() { const T = targets(); for (let i = 0; i < 2; i++) { const D = decks[i], d = 'AB'[i]; send({ type: 'cancelAt', deck: i }); // (moves still waiting in the engine: a restoring one runs at once, the others are dropped)
-    for (const [n] of FX_RACK) send({ type: 'fx', deck: i, name: n, on: false }); if (D.fxOn) D.fxOn.fill(0);
+    for (const [n] of FX_RACK) send({ type: 'fx', deck: i, name: n, on: false }); if (D.fxOn) D.fxOn.fill(0); if (typeof bfxAllOff === 'function') bfxAllOff(i); if (typeof mgAllOff === 'function') mgAllOff(i); /* (v10) Safe: the Beat FX and Mangle of every part too (9.5 left them on, and the FX screen showed effects the engine no longer played) */
     for (const [k] of FILLS) send({ type: 'fill', deck: i, kind: k, on: false }); if (D.xy) { D.xy.hold = false; xySet(i, 0, 0); } if (D.macro && D.score) for (const [k] of MACROS) macroSet(i, k, MACRO_CENTER[k] ? 0.5 : 0);
     T[`${d}.filter`].set(0.5); if (D.loop) setLoop(i, 0); if (D.pendJump >= 0) { send({ type: 'jump', deck: i, atStep: -1, step: 0 }); D.pendJump = -1; }
     T[`${d}.energy`].set(0.5); const a = autoOf(D); a.paused = AUTO_PARTS.filter(([k]) => a.on[k]).map(([k]) => k); for (const [k] of AUTO_PARTS) a.on[k] = false; renderAuto(i); }

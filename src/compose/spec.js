@@ -53,7 +53,7 @@ function validateSpec(spec) {
   if (!isObj(spec)) { err('', 'the score must be a JSON object', '{"forge":1,"genre":"tech-house"}'); return { ok: false, errors: E, warnings: W }; }
   const known = ['forge', 'title', 'genre', 'mood', 'seed', 'variation', 'melodySeed', 'seeds', 'complexity', 'bpm', 'key', 'mode', 'swing', 'harmony', 'form', 'drums', 'bass', 'chords', 'lead', 'sound', 'mix', 'notes', 'length', 'ext', 'fx'];
   for (const k of Object.keys(spec)) if (!known.includes(k)) warn(k, 'unknown field — ignored', 'fields: ' + known.join(', '));
-  if (spec.fx != null && (!isObj(spec.fx) || (spec.fx.mangle != null && !isObj(spec.fx.mangle)))) err('fx', 'must be an object; fx.mangle: the Mangle unit kept in the track', '{"mangle": {"target": -1, "morph": 0.5, "wet": 1, "s": [{"on": true, "mode": "slice", "sub": 1, "macro": 0.5}]}}'); /* (v9.5) */
+  if (spec.fx != null && (!isObj(spec.fx) || (spec.fx.mangle != null && !isObj(spec.fx.mangle)) || (spec.fx.mangles != null && (!Array.isArray(spec.fx.mangles) || spec.fx.mangles.length > 10 || !spec.fx.mangles.every(isObj))))) err('fx', 'must be an object; fx.mangle: the Mangle unit kept in the track; fx.mangles (v10): every unit kept (the deck and each part, at most 10)', '{"mangle": {"target": -1, "morph": 0.5, "wet": 1, "s": [{"on": true, "mode": "slice", "sub": 1, "macro": 0.5}]}}'); /* (v9.5) */
   if (spec.forge !== SPEC_VERSION) err('forge', `must be ${SPEC_VERSION}`, '"forge": 1');
   const G = GENRE_BY_ID[spec.genre]; if (!G) err('genre', `unknown genre "${spec.genre}"`, 'one of: ' + GENRES.map((g) => g.id).join(', '));
   for (const k of ['seed', 'variation', 'melodySeed']) if (spec[k] != null && !(Number.isInteger(spec[k]) && spec[k] >= 0)) err(k, 'must be a non-negative integer');

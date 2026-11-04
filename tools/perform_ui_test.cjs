@@ -28,6 +28,17 @@ const OUT = process.argv[2] || '.'; let fails = 0; const ok = (c, m) => { consol
   await page.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2); await page.mouse.down(); await page.waitForTimeout(200);
   ok(await F(() => window.__forge.shell.bfxOf(0).fx.delay.on === true), 'X-Pad: delay on while held');
   await page.mouse.up(); await page.waitForTimeout(150); ok(await F(() => window.__forge.shell.bfxOf(0).fx.delay.on === false), '…off on release');
+  // (v10) Beat FX on several parts at once: a delay on the bass, then the chords picked and a reverb set there — the bass's delay keeps going
+  { const sent0 = await F(() => { window.__sent = []; window.__forge.A2.sendTap = (m) => window.__sent.push(m); return 0; });
+    await F(() => { document.querySelector('[data-bt="4"]').click(); document.querySelector('[data-fx="delay"]').click(); document.querySelector('.bfx-on').click(); });
+    await F(() => { document.querySelector('[data-bt="5"]').click(); document.querySelector('[data-fx="reverb"]').click(); document.querySelector('.bfx-on').click(); }); await page.waitForTimeout(100);
+    const st = await F((n) => { const B = window.__forge.shell.bfxOf(0), S = (window.__sent || []).slice(n).filter((m) => m.type === 'fx' && m.deck === 0);
+      return { bass: B.maps[4].delay.on, chords: B.maps[5].reverb.on, bassOff: S.some((m) => m.ch === 4 && m.on === false), onB: S.some((m) => m.ch === 4 && m.on === true && m.name === 'delay'), onC: S.some((m) => m.ch === 5 && m.on === true && m.name === 'reverb'),
+        leds: [...document.querySelectorAll('[data-bt] .tgt-led.lit')].map((e) => +e.parentNode.dataset.bt) }; }, sent0);
+    ok(st.bass && st.chords && st.onB && st.onC && !st.bassOff && st.leds.includes(4) && st.leds.includes(5), `Beat FX on two parts at once: bass delay and chords reverb both on, the bass never switched off, both chips lit (${JSON.stringify(st)})`);
+    await F(() => document.querySelector('#safeBtn').click()); await page.waitForTimeout(100);
+    const after = await F(() => { const B = window.__forge.shell.bfxOf(0); return Object.values(B.maps).some((m) => Object.values(m).some((f) => f.on)); });
+    ok(!after, 'Safe switches the Beat FX off on every part'); await F(() => document.querySelector('[data-bt="-1"]').click()); }
   // cue
   await page.click('.chan[data-d="0"] .cuebtn'); await page.waitForTimeout(100); ok(await F(() => window.__forge.decks[0].cue === true && document.querySelector('.chan[data-d="0"] .cuebtn').classList.contains('on')), 'CUE (the mixer, MIX) lights the deck');
   await page.keyboard.press('p'); await page.click('#cueBtn'); await page.waitForTimeout(300); await page.check('[name=cuem][value=split]'); await page.waitForTimeout(300);
@@ -96,7 +107,7 @@ const OUT = process.argv[2] || '.'; let fails = 0; const ok = (c, m) => { consol
     await page.mouse.up(); await page.waitForTimeout(100); const rel = await F(() => window.__sent.filter((x) => x.type === 'mangle' && x.slot === 1).pop());
     ok(!!held && held.on === true && held.mode === 0 && Math.abs(held.macro - 0.8) < 0.05 && Math.abs(held.a - 0.8) < 0.05 && rel && rel.on === false, `Mangle: the touch pad plays slot B while held (Macro ${held && held.macro}, ${held && held.a}) and lets go on release`);
     await F(() => { window.__sent = []; const b = [...document.querySelectorAll('[data-mgr]')].find((x) => x.textContent === 'Tuned drums'); b.click(); }); await page.waitForTimeout(100);
-    ok(await F(() => window.__sent.some((x) => x.type === 'mangle' && x.target === 3) && window.__forge.shell.mgOf(0).target === 3), 'Mangle: the "Tuned drums" recipe puts itself on the percussion');
+    ok(await F(() => window.__sent.some((x) => x.type === 'mangle' && x.unit === 3 && x.on === true) && window.__forge.shell.mgOf(0).target === 3 && window.__forge.decks[0].mgU[-1].s[0].on === true), 'Mangle: the "Tuned drums" recipe puts itself on the percussion (its own unit — the deck\'s Spectral · Key keeps playing)');
     await F(() => document.querySelector('[data-mgkeep]').click()); const kept = await F(() => window.__forge.decks[0].spec.fx && window.__forge.decks[0].spec.fx.mangle);
     ok(!!kept && kept.target === 3 && kept.s[1].mode === 'spectral' && kept.s[0].mode === 'spectral', 'Mangle: Keep in track writes the unit into the track (spec.fx.mangle)');
     const back = await F(async () => { const W = window.__forge, sp = JSON.parse(JSON.stringify(W.decks[0].spec)); W.shell.mgOf(0).s[0].on = false; W.shell.mgOf(0).s[0].mode = 'fold'; window.__sent = []; const s = W.compileSpec(sp, { fastLevels: true }); W.installScore(0, s, { play: false });
