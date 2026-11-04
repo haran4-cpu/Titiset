@@ -266,7 +266,9 @@ async function composeTrackAsync(gid, seed, opt) { requestBank(BANK_FOR_GENRE[gi
 // (v9.4) how long a new track is: Radio (about half), Club (the default: 6–8 minutes for house and techno), Extended (about 1.4×)
 const TRACK_LENS = [['radio', 'Radio', 'about 3–4 minutes'], ['club', 'Club', 'the club length — 6–8 minutes for house and techno'], ['extended', 'Extended', 'longer intros, more acts — 9–11 minutes']];
 const TRACK_LEN = { v: (() => { try { const x = localStorage.getItem('forge.len'); return ['radio', 'club', 'extended'].includes(x) ? x : 'club'; } catch (e) { return 'club'; } })() };
-async function composeAsync(gid, opt) { opt = opt || {}; if (!opt.length) opt.length = TRACK_LEN.v; if (opt.mood === undefined && TASTE.on && TASTE.mood) opt.mood = TASTE.mood; /* (v9.5) the mood you picked stays */ const seed = opt.seed || (Math.random() * 2 ** 31) >>> 0, snd = paletteSounds(gid, seed, tastePref());
+// (v9.5) Your sound is on (ui/taste.js; tools that load app.js alone run without it)
+function tasteOn() { return typeof TASTE !== 'undefined' && TASTE.on; }
+async function composeAsync(gid, opt) { opt = opt || {}; if (!opt.length) opt.length = TRACK_LEN.v; if (opt.mood === undefined && tasteOn() && TASTE.mood) opt.mood = TASTE.mood; /* (v9.5) the mood you picked stays */ const seed = opt.seed || (Math.random() * 2 ** 31) >>> 0, snd = paletteSounds(gid, seed, tasteOn() ? tastePref() : null);
   if (!Object.keys(snd).length || opt.palette === false) return composeTrackAsync(gid, seed, opt);
   const spec = { forge: 1, genre: gid, seed, sound: snd, length: opt.length }; if (opt.key != null) spec.key = PCN[opt.key]; if (opt.mood && MOODS[opt.mood]) spec.mood = opt.mood;
   try { return await compileAsync(spec, { fastLevels: true }); } catch (e) { return composeTrackAsync(gid, seed, opt); } }
@@ -308,7 +310,7 @@ const TX_BY_ID = Object.fromEntries(TX_STYLES.map((x) => [x.id, x])), txHist = [
 function pickStyle(Da, Db) { const ga = GENRE_BY_ID[Da.gid] || {}, gb = GENRE_BY_ID[Db.gid] || {}, ea = SET_ENERGY[Da.gid] ?? 0.6, eb = SET_ENERGY[Db.gid] ?? 0.6, jump = Math.abs((Db.score ? Db.score.meta.bpm : Da.bpm) - Da.bpm), fam = ga.family !== gb.family;
   const w = {}; for (const x of TX_STYLES) w[x.id] = 1; const hard = jump > 6 || fam ? 2.2 : 0.6; for (const x of TX_STYLES) if (x.hard) w[x.id] *= hard;
   if (eb > ea + 0.08) { w.riser *= 2; w.cut *= 1.6; w.tease *= 1.4; w.stems *= 1.3; } else if (eb < ea - 0.08) { w.echo *= 1.8; w.filter *= 1.5; w.breakdown *= 1.6; w.brake *= 1.4; } else { w.blend *= 1.4; w.stems *= 1.4; w.filter *= 1.2; }
-  if (TASTE.on) for (const id in w) w[id] *= Math.exp(0.25 * clamp(TASTE.mix[id] || 0, -3, 5)); // (v9.5) the styles you choose lean the mix your way
+  if (typeof TASTE !== 'undefined' && TASTE.on) for (const id in w) w[id] *= Math.exp(0.25 * clamp(TASTE.mix[id] || 0, -3, 5)); // (v9.5) the styles you choose lean the mix your way
   for (const id of txHist) w[id] = 0; // never one of the last five: any six mixes in a row are six different styles, so any ten hold at least six
   let tot = 0; for (const id in w) tot += w[id]; let x = Math.random() * tot; for (const id in w) { x -= w[id]; if (x <= 0) return id; } return 'blend'; }
 // what a mix sends: its style, its length, where the incoming track starts, where the swap line sits
@@ -351,7 +353,7 @@ function setLoop(i, bars) { const D = decks[i]; if (!D.score) return;
 // ---------------------------------------------------------------- auto-DJ
 // the set brain (composer.js planNext) decides; the set remembers what it played, the energy it started at and the track count
 function pickNext(gid) { if (!auto.hist || !auto.hist.length || auto.hist[auto.hist.length - 1] !== gid) (auto.hist = auto.hist || []).push(gid); if (auto.home == null) { auto.home = SET_ENERGY[gid] ?? 0.6; auto.homeFam = (GENRE_BY_ID[gid] || {}).family; auto.homeBpm = decks[lead].bpm; }
-  const r = planNext(gid, { journey: auto.journey, hist: auto.hist, bpm: decks[lead].bpm, home: auto.home, homeFam: auto.homeFam, homeBpm: auto.homeBpm, step: auto.step = (auto.step || 0) + 1, pref: TASTE.on ? TASTE.genres : null }); auto.why = r.why; auto.hist.push(r.gid); if (auto.hist.length > 12) auto.hist.shift(); return r.gid; }
+  const r = planNext(gid, { journey: auto.journey, hist: auto.hist, bpm: decks[lead].bpm, home: auto.home, homeFam: auto.homeFam, homeBpm: auto.homeBpm, step: auto.step = (auto.step || 0) + 1, pref: tasteOn() ? TASTE.genres : null }); auto.why = r.why; auto.hist.push(r.gid); if (auto.hist.length > 12) auto.hist.shift(); return r.gid; }
 // where Auto-DJ starts a mix: half of it over the outgoing track's last full section, half over its outro — the room keeps the
 // running track's body while the next one arrives (mixing over the bare outro measured a 2–3 LU dip for the whole mix)
 function autoMixAt(score, len) { const end = score.meta.bars * 16, out = score.sections[score.sections.length - 1], outAt = out && out.type === 'outro' ? out.bar0 * 16 : end;
