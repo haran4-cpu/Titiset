@@ -50,6 +50,7 @@ function installScore(i, s, opt) { // a freshly composed / compiled score become
   D.score = s; D.gid = s.meta.gid; D.native = s.meta.bpm; D.groove = null; D.partMix = null; D.loop = 0; /* (v9.3: a new track starts with the engine's groove and part levels: as written) */ D.pendJump = -1; D.pos = 0; D.ended = false; D.fresh = true; D.libId = null; D.spec = deckSpec(s); D.val = null; D.lint = lintScore(s);
   const { msg, transfer } = packScore(s); const bpm = otherLive ? other.bpm : 0, play = !!opt.play && !otherLive;
   send({ type: 'load', deck: i, score: msg, cal: cal(s.meta.gid), play, bpm: bpm || undefined, from: 0 }, transfer);
+  if (typeof ctlOnInstall === 'function') ctlOnInstall(i); /* (v10.1) solo cleared, the atmosphere sent */
   if (!opt.asSaved && typeof tasteApplyParts === 'function' && tasteOn()) tasteApplyParts(i); // (v10) the part levels you keep setting (not on a library track or a set: those play as saved)
   D.bpm = bpm || s.meta.bpm; D.loading = null; // (v9.2) the tempo it will play at, at once (the box showed the last track's tempo until the analysis, 5–9 s later)
   D.mute.fill(false); D.trim = null; D.trimNA = false; renderDeckHead(i); renderStems(i); analyse(i, s); if (s.levelPending) refineInWorker(i, s); // palette levels: exact match from the worker

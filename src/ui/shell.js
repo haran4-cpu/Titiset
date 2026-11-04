@@ -43,10 +43,12 @@ function buildShell() { const app = $('.app'), con = $('.console'); if (!app || 
   $('[data-tp=play0]', tr).onclick = () => playPause(0); $('[data-tp=play1]', tr).onclick = () => playPause(1);
   $('[data-tp=mix]', tr).onclick = async () => { await startAudio(); const b = lead ^ 1, D = decks[b]; if (tx) { toast('A mix is already running — Cancel it on MIX'); return; } if (!D.score) { toast(`Deck ${'AB'[b]} is empty — pick a genre for it first`); return; } if (!decks[lead].playing) { playPause(b); return; } mixInto(b); };
   // MIX: the mixer
-  if (mixer) into('mix').appendChild(mixer); con.remove(); const ds = document.createElement('section'); ds.className = 'decksound'; into('mix').appendChild(ds); buildDeckSound(ds);
+  if (mixer) into('mix').appendChild(mixer); con.remove(); const chm = document.createElement('section'); chm.className = 'chmix'; chm.setAttribute('aria-label', 'Channels'); into('mix').appendChild(chm); buildChannels(chm); /* (v10.1) the channel mixer */ const ds = document.createElement('section'); ds.className = 'decksound'; into('mix').appendChild(ds); buildDeckSound(ds);
   // FX: the Beat FX, then the performance pads (moved out of the decks)
   const fx = document.createElement('div'); fx.className = 'bfx'; fx.setAttribute('aria-label', 'Beat FX'); into('fx').appendChild(fx); buildBeatFx(fx);
   const mg = document.createElement('div'); mg.className = 'mangle'; into('fx').appendChild(mg); buildMangle(mg);
+  const at = document.createElement('div'); at.className = 'atmos'; into('fx').appendChild(at); buildAtmos(at); /* (v10.1) the atmosphere, then the ear candy, after Mangle */
+  const cd = document.createElement('div'); cd.className = 'candy'; into('fx').appendChild(cd); buildCandy(cd);
   const rz = document.createElement('div'); rz.className = 'risers'; into('fx').appendChild(rz); buildRisers(rz);
   const os = document.createElement('div'); os.className = 'oneshots'; into('fx').appendChild(os); buildOneShots(os);
   const pads = document.createElement('div'); pads.className = 'fx-pads'; into('fx').appendChild(pads); for (const p of $$('.perf')) pads.appendChild(p);
@@ -56,7 +58,8 @@ function buildShell() { const app = $('.app'), con = $('.console'); if (!app || 
   // styles (the genre library), then making new tracks (Ask, length), then Your sound and the telemetry
   const lib = $('.lib'); const top = $('.top'); const set = into('set'); const ask = $('.askbar');
   if (top) { const tools = document.createElement('section'); tools.className = 'set-tools'; tools.setAttribute('aria-label', 'Session'); tools.innerHTML = '<h3 class="set-h">Session</h3><div class="set-row"></div>'; const row = $('.set-row', tools);
-    for (const id of ['recBtn', 'setBtn', 'cueBtn', 'ctlBtn', 'safeBtn', 'perfBtn', 'power']) { const b = $('#' + id, top); if (b) row.appendChild(b); } for (const b of $$('button.power', top)) row.appendChild(b); set.appendChild(tools); }
+    for (const id of ['recBtn', 'setBtn', 'cueBtn', 'ctlBtn', 'safeBtn', 'perfBtn', 'power']) { const b = $('#' + id, top); if (b) row.appendChild(b); } for (const b of $$('button.power', top)) row.appendChild(b);
+    { const ol = $('#outLevel'); if (ol) { const w = document.createElement('label'); w.className = 'set-master'; w.innerHTML = '<span class="lbl">Master</span>'; w.appendChild(ol); row.appendChild(w); } } set.appendChild(tools); } // (v10.1) the master's drive, where you start a session
   const mylibSlot = document.createElement('div'); mylibSlot.className = 'mylib-slot'; set.appendChild(mylibSlot);
   if (lib) { set.appendChild(lib); }
   const mk = document.createElement('section'); mk.className = 'set-new'; mk.setAttribute('aria-label', 'New tracks'); mk.innerHTML = '<h3 class="set-h">New tracks</h3>'; set.appendChild(mk); if (ask) mk.appendChild(ask);
@@ -85,7 +88,7 @@ function buildBeatFx(el) {
       <div class="bfx-side"><label class="lbl" for="bfxDepth">Depth</label><input id="bfxDepth" class="bfx-depth" type="range" min="0" max="1" step="0.01" aria-label="Depth">
         <button class="bfx-q" aria-pressed="true" title="Switch on the next beat">Quantize</button><button class="bfx-on big" aria-pressed="false">FX ON</button></div></div>
     <div class="bfx-params"></div>`;
-  $$('[data-bd]', el).forEach((b) => b.onclick = () => { SHELL.fxDeck = +b.dataset.bd; renderBeatFx(); $$('.os-d').forEach((d) => { d.textContent = 'AB'[SHELL.fxDeck]; }); renderRisers(); renderMangle(); });
+  $$('[data-bd]', el).forEach((b) => b.onclick = () => { SHELL.fxDeck = +b.dataset.bd; renderBeatFx(); $$('.os-d').forEach((d) => { d.textContent = 'AB'[SHELL.fxDeck]; }); renderRisers(); renderMangle(); renderAtmos(); });
   $$('[data-bt]', el).forEach((b) => b.onclick = () => bfxTarget(SHELL.fxDeck, +b.dataset.bt)); $('.bfx-alloff', el).onclick = () => bfxAllOff(SHELL.fxDeck);
   $$('[data-fx]', el).forEach((b) => b.onclick = () => { bfxOf(SHELL.fxDeck).sel = b.dataset.fx; renderBeatFx(); });
   $$('[data-beat]', el).forEach((b) => b.onclick = () => { const i = SHELL.fxDeck, B = bfxOf(i), F = B.fx[B.sel]; F.beat = +b.dataset.beat; if (F.on) bfxSend(i, B.sel, 'now'); renderBeatFx(); });
@@ -181,7 +184,7 @@ const tasteMixT = {}; function tasteMixKnobLater(k, v, d) { clearTimeout(tasteMi
 function renderDeckSound() { const el = $('.decksound'); if (!el) return; const i = SHELL.dsDeck | 0, D = decks[i], m = D.spec && D.spec.mix; $$('[data-dsd]', el).forEach((b) => b.classList.toggle('on', +b.dataset.dsd === i));
   const k = $('.ds-k', el), room = $('.ds-room', el); k.innerHTML = ''; room.innerHTML = ''; if (!m) { k.innerHTML = '<span class="dk-legend">Load a track on this deck first.</span>'; } else {
     const G0 = GENRE_BY_ID[D.gid] || { mix: {} }; if (m.echo == null) m.echo = 1; if (m.heat == null) m.heat = G0.mix.heat != null ? G0.mix.heat : 1; if (m.punch == null) m.punch = G0.mix.punch != null ? G0.mix.punch : 1;
-    for (const [label, key, eng, mn, mx] of [['Reverb', 'verb', 'verb', 0, 1], ['Delay', 'delay', 'delay', 0, 1], ['Harm echo', 'echo', 'echo', 0, 2], ['Pump', 'sidechain', 'sc', 0, 0.9], ['Heat', 'heat', 'heat', 0, 2], ['Punch', 'punch', 'punch', 0, 2], ['Space', 'carve', 'carve', 0, 1]]) /* (v10) Space: how much the parts make room for each other (the mix carve) */
-      dknob(k, { label, min: mn, max: mx, value: m[key] != null ? m[key] : key === 'carve' ? 1 : 0, def: m[key] != null ? m[key] : key === 'carve' ? 1 : 0, onchange: (v) => { send({ type: 'sends', deck: i, p: { [eng]: v } }); D.spec.mix[key] = +v.toFixed(3); tasteMixKnobLater(key, v, key === 'sidechain' ? G0.mix.sc : key === 'carve' ? (G0.mix.carve != null ? G0.mix.carve : 1) : key === 'heat' || key === 'punch' ? (G0.mix[key] != null ? G0.mix[key] : 1) : G0.mix[key]); } }); }
+    for (const [label, key, eng, mn, mx] of [['Reverb', 'verb', 'verb', 0, 1], ['Delay', 'delay', 'delay', 0, 1], ['Harm echo', 'echo', 'echo', 0, 2], ['Pump', 'sidechain', 'sc', 0, 0.9], ['Heat', 'heat', 'heat', 0, 2], ['Punch', 'punch', 'punch', 0, 2], ['Space', 'carve', 'carve', 0, 1], ['Smooth', 'smooth', 'smooth', 0, 1]]) /* (v10) Space: how much the parts make room for each other (the mix carve) */
+      dknob(k, { label, min: mn, max: mx, value: m[key] != null ? m[key] : key === 'carve' || key === 'smooth' ? 1 : 0, def: m[key] != null ? m[key] : key === 'carve' || key === 'smooth' ? 1 : 0, onchange: (v) => { send({ type: 'sends', deck: i, p: { [eng]: v } }); D.spec.mix[key] = +v.toFixed(3); tasteMixKnobLater(key, v, key === 'sidechain' ? G0.mix.sc : key === 'carve' || key === 'smooth' ? (G0.mix[key] != null ? G0.mix[key] : 1) : key === 'heat' || key === 'punch' ? (G0.mix[key] != null ? G0.mix[key] : 1) : G0.mix[key]); } }); }
   dknob(room, { label: 'Size', min: 0.6, max: 6, curve: 'log', unit: 's', value: space.t60, def: 2.4, onchange: (v) => { space.t60 = v; send({ type: 'space', t60: v, damp: space.damp }); } });
   dknob(room, { label: 'Damp', min: 0, max: 0.9, value: space.damp, def: 0.4, onchange: (v) => { space.damp = v; send({ type: 'space', t60: space.t60, damp: v }); } }); }

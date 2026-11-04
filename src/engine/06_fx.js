@@ -14,8 +14,10 @@ class FxVoice { constructor() { this.on = 0; this.kind = 0; this.t = 0; this.dur
   this.f0 = 0; this.f1 = 0; this.fc = 0; this.idx = 0; this.gl = 1; this.gr = 1; this.nb = 0; this.bf = 0; this.be = 0; this.bk = 0; this.cl = new Float32Array(FX_COMB); this.ci = 0; this.cn = 1; this.kill = 0; shape(this); } }
 const FX_COMB = 1200, FX_BUB = [0, 3, 7, 10, 12, 15, 19, 24]; // laser comb memory (samples); bubble pitch set (minor pentatonic-ish, semitones)
 // level per kind at velocity 1 (measured so the new kinds sit with the riser and the crash: tools/fx_test.cjs)
-const CANDY_GAIN = [0, 0, 0, 0, 0, 0, 0, 0.17, 0.25, 0, 1.69, 0.36, 0.5]; // (v9.5) the rebuilt candy's level per kind (set by tools/candy_test.cjs against the 9.4 sounds)
-const FX_GAIN = [1, 1, 1, 1, 1, 1, 1, 0.33, 0.24, 0.53, 0.4, 0.29, 0.31];
+const CANDY_GAIN = [0, 0, 0, 0, 0, 0, 0, 0.17, 0.25, 0, 1.69, 0.36, 0.5, 0, 0.67, 0.23, 0.29, 0.52, 0.49, 0.52]; // (v10.1: 14–19 the minimal set — about 1–2 dB under Bubbles' energy, peaks no higher than its peak) // (v9.5) the rebuilt candy's level per kind (set by tools/candy_test.cjs against the 9.4 sounds)
+const CANDY_KINDS = [9, 14, 15, 16, 17, 18, 19, 7, 8, 10, 11, 12]; // (v10.1) Bubbles and the minimal set first: the default; the 9.5 rebuilt five after, off until switched on
+const CANDY_DEFAULT = (1 << 9) | (1 << 14) | (1 << 15) | (1 << 16) | (1 << 17) | (1 << 18) | (1 << 19);
+const FX_GAIN = [1, 1, 1, 1, 1, 1, 1, 0.33, 0.24, 0.53, 0.4, 0.29, 0.31, 1, 1, 1, 1, 1, 1, 1];
 class Fx {
   constructor(sr) { this.sr = sr; this.v = Array.from({ length: 8 }, () => new FxVoice()); this.i = 0; this.gain = 1; this.ctr = 0;
     // the ear candy's own echo: the psy 3/16 ping-pong (0.75 beat), band-limited in its feedback, running only while it rings
@@ -23,7 +25,7 @@ class Fx {
     this.killN = Math.max(1, Math.round(sr * 0.005)); this.killK = 1 / this.killN; this.tx = [new TxVoice(sr), new TxVoice(sr), new TxVoice(sr), new TxVoice(sr)]; this.txi = 0; this.cv = [new CandyVoice(sr), new CandyVoice(sr), new CandyVoice(sr), new CandyVoice(sr)]; this.cvi = 0; this.mask = 0x89; this.root = 0; this.legacy = 0; /* (legacy: the 9.4 candy, for tools/candy_test.cjs) */ this.sps = sr * 60 / 124 / 4; shape(this); }
   setTempo(bpm) { this.dd = clamp(Math.round(this.sr * 60 / Math.max(40, bpm) * 0.75), 64, this.dn - 2); this.sps = this.sr * 60 / Math.max(40, bpm) / 4; }
   trigger(off, kind, vel, durSamples, note, pan, rec) { if (kind === 13) { const t = this.tx[this.txi]; this.txi = (this.txi + 1) % this.tx.length; t.trigger(off, rec | 0, vel, durSamples, note, pan, this.sps); return; } // (v9.5) a layered transition recipe (06c_risers.js): rec = the recipe, note = the key, pan = the chord's third
-    if (kind >= 7 && kind <= 12 && kind !== 9 && !this.legacy) { const c = this.cv[this.cvi]; this.cvi = (this.cvi + 1) % this.cv.length; c.trigger(off, kind, vel * CANDY_GAIN[kind], durSamples, note, pan, this.mask, this.root); return; } // (v9.5) the rebuilt ear candy (06e_candy.js)
+    if (((kind >= 7 && kind <= 12 && kind !== 9 && !this.legacy) || kind >= 14) && kind <= 19) { const c = this.cv[this.cvi]; this.cvi = (this.cvi + 1) % this.cv.length; c.trigger(off, kind, vel * CANDY_GAIN[kind], durSamples, note, pan, this.mask, this.root); return; } // (v9.5) the rebuilt ear candy (06e_candy.js)
     const v = this.v[this.i]; this.i = (this.i + 1) % this.v.length;
     v.on = 1; v.kill = 0; v.kind = kind; v.t = 0; v.wait = off; v.vel = vel * (FX_GAIN[kind] ?? 1); v.dur = Math.max(1, durSamples); v.ph = 0; v.ph2 = 0; v.b1.reset(); v.b2.reset(); v.z = 0; v.pan = noise() * 0.35; for (let k = 0; k < 6; k++) v.cp[k] = (noise() + 1) * 0.5;
     if (kind === 5 || kind === 6) { v.b1.set(kind === 5 ? 7200 : 6400, 0.9, this.sr); v.b2.set(kind === 5 ? 6800 : 5800, 0.9, this.sr); }

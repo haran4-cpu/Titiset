@@ -39,7 +39,9 @@ class Engine {
       case 'partGain': if (m.ch >= 0 && m.ch < NCH) D.mix.ug[m.ch | 0] = clamp(m.v, 0, 2); break; // (v9.3) a part's level (EDIT · Mix), on top of the calibrated balance
       case 'eq': D.mix.low = clamp(m.low ?? D.mix.low, -40, 12); D.mix.mid = clamp(m.mid ?? D.mix.mid, -40, 12); D.mix.high = clamp(m.high ?? D.mix.high, -40, 12); break; // (v9.2 review) clamped: EQ high = 1e9 dB overflowed the filter, and every self-heal copied it back (333 heals in 1000 blocks)
       case 'filter': D.mix.filter = clamp(m.v, -1, 1); break;
-      case 'carve': D.mix.carve = clamp(+m.v || 0, 0, 1); break; // (v10) how much the parts make room for each other (0 = off, the 9.5 mix)
+      case 'carve': D.mix.carve = clamp(+m.v || 0, 0, 1); break;
+      case 'atmos': D.setAtmos(m); break;
+      case 'candy': D.setCandy(m); break; // (v10.1) { allow, level, density, tx, txLevel } // (v10.1) { kind: −1 the track's | 0 none | 1–5, level 0…2, tone −1…1 } // (v10) how much the parts make room for each other (0 = off, the 9.5 mix)
       case 'fader': D.mix.fader = clamp(m.v, 0, 1.2); break;
       case 'start': this.pending = { deck: m.deck | 0, atStep: this.futureLine(m.atStep), from: m.from || 0 }; break; // start deck synced to the lead deck's grid (a line already passed moves to the next bar)
       case 'transition': { if (this.tx) this.cancelTx('replaced'); const at = this.futureLine(m.atStep, m.from | 0), len = Math.max(16, Math.round(m.bars || 16) * 16), Bd = this.decks[m.deck | 0];

@@ -31,7 +31,7 @@ const LAYERS = {
   groove2: { kick: 1, snare: 1, hats: 1, perc: 1, bass: 1, chords: 1, lead: 0.5, texture: 1 },
   break: { pad: 1, chords: 0.8, lead: 0.8, texture: 1, perc: 0.2, bass: 0.3 }, break2: { pad: 1, chords: 0.6, lead: 0.5, texture: 1 },
   build: { snare: 1, hats: 1, perc: 0.5, bass: 0.6, chords: 0.8, pad: 0.6, lead: 0.6, riser: 1, kick: 0.5, texture: 1 },
-  drop: { kick: 1, snare: 1, hats: 1, perc: 1, bass: 1, chords: 1, pad: 0.6, lead: 1, texture: 0.5 },
+  drop: { kick: 1, snare: 1, hats: 1, perc: 1, bass: 1, chords: 1, pad: 0.4, lead: 1, texture: 0.5 }, // (v10.1: the pad 0.6 → 0.4 in drops — the bed under chords, lead and arp, not a fourth voice in the middle)
   outro: { kick: 1, snare: 0.6, hats: 1, perc: 0.6, bass: 0.4 }, intro: { pad: 1, chords: 0.6, texture: 1, hats: 0.3, lead: 0.4 },
   // (v9.4) the false drop: after a build, the hook and the harmony arrive with the hats and percussion — but no kick and no bass yet
   tease: { snare: 0.6, hats: 1, perc: 1, chords: 1, pad: 0.6, lead: 1, texture: 0.6 },

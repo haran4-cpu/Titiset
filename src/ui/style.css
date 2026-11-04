@@ -636,3 +636,17 @@ body.shell { height: 100vh; height: 100dvh; overflow: hidden; padding-bottom: 0 
 .tgt-chips { margin: 8px 0 4px; } .tgt-chips .dk-chip { display: inline-flex; align-items: center; gap: 6px; }
 .tgt-led { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--line2); } .tgt-led.lit { background: var(--a); box-shadow: 0 0 6px var(--a); }
 .tgt-chips .dk-chip:disabled { opacity: .4; }
+
+/* (v10.1) CHANNELS (MIX): a row per part — M · S · ◎ · name · level · dB */
+.chmix { display: grid; gap: 10px; margin-bottom: 18px; } .ch-groups { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; } .ch-groups .btn.on { border-color: var(--acc); color: var(--acc); }
+.ch-rows { display: grid; gap: 6px; } .ch-row { display: grid; grid-template-columns: auto auto auto 64px minmax(0, 1fr) 64px; gap: 8px; align-items: center; }
+.ch-row.off .ch-n, .ch-row.off .ch-db { opacity: .45; } .ch-n { font: 600 13px var(--f-ui); } .ch-db { font: 12px var(--f-data); color: var(--dim); text-align: right; font-variant-numeric: tabular-nums; }
+.ch-m, .ch-s, .ch-o { min-width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--line2); background: var(--panel2); color: var(--text); font: 700 13px var(--f-ui); }
+.ch-m.on { background: var(--crit); border-color: var(--crit); color: var(--ink); } .ch-s.on { background: var(--acc); border-color: var(--acc); color: var(--ink); }
+.ch-row input[type=range] { width: 100%; min-width: 0; }
+.stem.solo { box-shadow: inset 0 0 0 2px var(--acc); }
+/* (v10.1) ATMOSPHERE and EAR CANDY (FX) */
+.atmos, .candy { display: grid; gap: 10px; margin-top: 18px; } .cd-knobs { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; } .cd-knobs .mg-k { min-width: 160px; flex: 1; }
+.cd-tx.on { border-color: var(--good); color: var(--good); }
+@media (max-width: 420px) { .ch-row { grid-template-columns: auto auto auto 52px minmax(0, 1fr); } .ch-db { display: none; } }
+.set-master { display: inline-flex; align-items: center; gap: 8px; } .set-master select { min-height: var(--tap); }

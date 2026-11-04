@@ -10,16 +10,17 @@ const CH = { kick: 0, snare: 1, hats: 2, perc: 3, bass: 4, chords: 5, pad: 6, le
 const CH_NAMES = ['kick', 'snare', 'hats', 'perc', 'bass', 'chords', 'pad', 'lead', 'arp', 'fx', 'texture'];
 const PERC_PAN = { tom: -0.25, conga: 0.5, bongo: -0.55, cowbell: 0.35, clave: -0.45, wood: 0.45, tamb: 0.6, timbale: -0.4, tick: 0.6, rim: 0.15, agogo: 0.4, guiro: -0.45, triangle: 0.55, djembe: -0.3, taiko: 0.1, maraca: 0.5, cajon: -0.1, surdo: -0.15, tabla: 0.35, udu: -0.35, frame: 0.2, snap: -0.5, temple: 0.45, cuica: -0.4, bell: 0.55, gong: 0, metal: -0.35, click: 0.6, zap: -0.5, blip: 0.4, sweep: 0, cabasa: 0.55, logdrum: -0.2 };
 const HAT_KIND = { hc: 0, ho: 1, ride: 2, sh: 3, crash: 4, ped: 5 };
-const FX_KIND = { riser: 0, impact: 1, down: 2, sweep: 3, snareup: 4, reverse: 5, crash: 6, zap: 7, rise: 8, bubbles: 9, swirl: 10, squelch: 11, laser: 12, tx: 13 };
+const FX_KIND = { riser: 0, impact: 1, down: 2, sweep: 3, snareup: 4, reverse: 5, crash: 6, zap: 7, rise: 8, bubbles: 9, swirl: 10, squelch: 11, laser: 12, tx: 13, blip: 14, sonar: 15, click: 16, dub: 17, drop: 18, glitch: 19 };
 // ear candy (v9): the small one-shots producers fly over a groove — zaps, squelches, bubbles, lasers, swirls (06_fx.js), in key
 // and panned. Per family: the chance per bar in a drop (other sections scaled), the kinds with weights, and the chance of a swirl
 // into each 8-bar phrase. Psytrance lives on them (measured on v8: 0.1 FX per bar in its drops, all of them transitions); the
 // others get a few. Deterministic per bar, outside the random streams: nothing else in the track moves.
 const EAR = { psy: { p: 0.55, kinds: [['zap', 3], ['squelch', 2], ['bubbles', 2], ['laser', 1.5], ['rise', 1]], swirl: 0.9 },
-  techno: { p: 0.1, kinds: [['zap', 2], ['laser', 1], ['squelch', 1]], swirl: 0.35 }, hard: { p: 0.14, kinds: [['laser', 2], ['zap', 2]], swirl: 0.4 },
+  techno: { p: 0.16, kinds: [['blip', 3], ['sonar', 2], ['click', 2], ['dub', 2], ['glitch', 1], ['zap', 1]], swirl: 0.35 }, // (v10.1) techno's candy is minimal: blips, sonar, clicks, dub stabs
+  house: { p: 0.1, kinds: [['blip', 2], ['drop', 2], ['bubbles', 2], ['click', 1], ['dub', 1]], swirl: 0.2 }, chill: { p: 0.08, kinds: [['drop', 2], ['bubbles', 2], ['sonar', 1]], swirl: 0.2 }, afro: { p: 0.08, kinds: [['drop', 2], ['click', 2], ['blip', 1], ['bubbles', 1]], swirl: 0.15 }, hard: { p: 0.14, kinds: [['laser', 2], ['zap', 2]], swirl: 0.4 },
   bass: { p: 0.16, kinds: [['zap', 2], ['laser', 2], ['bubbles', 1]], swirl: 0.3 }, breaks: { p: 0.1, kinds: [['laser', 2], ['zap', 2]], swirl: 0.3 },
   trance: { p: 0.05, kinds: [['rise', 1], ['bubbles', 1]], swirl: 0.7 } };
-const EAR_SEC = { drop: 1, groove: 0.8, break: 0.45, build: 0.6, intro: 0.3, outro: 0.35 }, EAR_LEN = { zap: 2.5, squelch: 2.5, bubbles: 4, laser: 2, rise: 3 }, EAR_AT = [6, 10, 11, 13, 14, 15, 3, 7];
+const EAR_SEC = { drop: 1, groove: 0.8, break: 0.45, build: 0.6, intro: 0.3, outro: 0.35 }, EAR_LEN = { zap: 2.5, squelch: 2.5, bubbles: 4, laser: 2, rise: 3, blip: 2, sonar: 2, click: 2, dub: 2, drop: 3, glitch: 3 }, EAR_AT = [6, 10, 11, 13, 14, 15, 3, 7];
 const DROP_GAP = 2; // the half-beat of silence at the very end of a build, before the drop (in 16th-note steps)
 // production layer per family (what a producer adds on top of the parts): crash on phrase starts, a reverse cymbal into the
 // next phrase / section, the kick muted for the last beat before a 16-bar phrase ("the breath before the one")

@@ -8,6 +8,13 @@
    WIND    (swirl)   noise through two resonant combs tuned to the chord's root and fifth: a swell of tuned air that turns in the field
    ACID    (squelch) a 303-style phrase — root, root, octave, fifth — with slides and an accented, resonant, driven low-pass
    PING    (laser)   a plucked note thrown left and right in triplets, darker each time, the last one an octave up (a sparkle)
+   (v10.1) MINIMAL — six small, precise sounds in the spirit of minimal and dub techno, all on the grid, in key, into the candy echo:
+   BLIP    (14)  two to four tiny FM blips (12 ms) high on the chord's tones, sixteenths apart: the clicky melodic dots of minimal
+   SONAR   (15)  one pitched sine ping on the root or fifth with a long soft decay, sinking a few cents: a sonar in the dub echo
+   CLICK   (16)  a woody tuned click: a 1.5 ms noise grain ringing a narrow band-pass on a chord tone, three in a syncopated figure
+   DUB     (17)  a dub-techno chord stab: three saws on the chord, a closed low-pass and a 90 ms decay, left to the echo
+   DROP    (18)  water drops: a sine that slides up an octave in 25 ms and is gone in 40, two or three of them
+   GLITCH  (19)  a micro-stutter: grains of 9 ms that accelerate and climb the chord tones, gated softly (no clicks)
    Every note has a 1 ms attack and its own decay (no clicks); the phrase's level is set per kind (tools/candy_test.cjs). */
 const CANDY_KS = 2400; // the plucked string's delay memory (samples: down to ~18 Hz at 44.1 kHz)
 class CandyNote { constructor() { this.on = 0; this.at = 0; this.t = 0; this.f = 220; this.ft = 220; this.ph = 0; this.ph2 = 0; this.e = 0; this.k = 1; this.ix = 0; this.ik = 1; this.gl = 1; this.gr = 1; this.g = 1;
@@ -24,11 +31,23 @@ class CandyVoice {
     else if (kind === 8) { const N = 8; for (let k = 0; k < N; k++) { const m = T[Math.max(0, Math.min(T.length - 1, idx - 2 + k))]; S.push([Math.round(this.dur * Math.pow(k / N, 0.78)), mtof(m), 0.55 + 0.45 * k / N, clamp(-0.7 + 1.4 * k / (N - 1), -1, 1) * 0.8]); } }
     else if (kind === 11) { let r = base - (((base - root) % 12) + 12) % 12; if (r < base - 7) r += 12; const fifth = near(r + 7), seq = [r, r, r + 12, fifth]; for (let k = 0; k < 4; k++) S.push([at(k, 4), mtof(seq[k] - 12), k === 2 ? 1 : 0.8, P * 0.5, k === 2 ? 1 : 0, k === 3 ? 1 : 0]); }
     else if (kind === 12) { const N = 5, m = T[idx]; for (let k = 0; k < N; k++) S.push([at(k, N + 1), mtof(k === N - 1 ? m + 12 : m), Math.pow(0.72, k) * (k === N - 1 ? 0.8 : 1), k & 1 ? 0.75 : -0.75]); }
+    else if (kind === 14) { const N = 2 + Math.floor((noise() + 1) * 1.5), st = this.dur / 8; for (let k = 0; k < N; k++) S.push([Math.round(st * (k === 0 ? 0 : k === 1 ? 1 : k === 2 ? 3 : 4)), mtof(T[Math.max(0, Math.min(T.length - 1, idx + (k % 2 ? 2 : 0) + (k > 1 ? 3 : 0)))] + 12), k === 0 ? 1 : 0.7, clamp(P + (k & 1 ? 0.5 : -0.4), -1, 1)]); }
+    else if (kind === 15) { let r = base - (((base - root) % 12) + 12) % 12; if (r < base - 7) r += 12; const m = (noise() > 0.3 ? r : near(r + 7)) + 12; S.push([0, mtof(m), 1, clamp(P * 0.4, -1, 1)]); }
+    else if (kind === 16) { const st = this.dur / 6; for (const [k, j, g] of [[0, 0, 1], [1.5, 2, 0.7], [3, 1, 0.85]]) S.push([Math.round(st * k), mtof(T[Math.max(0, Math.min(T.length - 1, idx + j))] + 12), g, clamp(P + (j - 1) * 0.45, -1, 1)]); }
+    else if (kind === 17) { const lo = T.filter((m) => m >= base - 5 && m <= base + 9); const ch = (lo.length >= 3 ? lo : T).slice(0, 3); for (const m of ch) S.push([0, mtof(m - 12), 0.5, P * 0.3]); }
+    else if (kind === 18) { const N = 2 + (noise() > 0 ? 1 : 0); for (let k = 0; k < N; k++) S.push([Math.round(this.dur * (k * 0.31 + 0.05 * (noise() + 1))), mtof(T[Math.max(0, Math.min(T.length - 1, idx + 3 - 2 * k))] + 12), 1 - 0.2 * k, clamp(P + (k & 1 ? 0.6 : -0.6), -1, 1)]); }
+    else if (kind === 19) { const N = 8; let t0 = 0; for (let k = 0; k < N; k++) { S.push([Math.round(t0), mtof(T[Math.max(0, Math.min(T.length - 1, idx + Math.floor(k / 2)))] + 12), 0.55 + 0.45 * (k / N), clamp(P + (k & 1 ? 0.3 : -0.3), -1, 1)]); t0 += this.dur / 3 * Math.pow(0.72, k); } }
     else { this.d1 = clamp(sr / mtof(T[Math.max(0, idx - 1)] + 12), 8, 2040); this.d2 = clamp(sr / mtof(near(T[Math.max(0, idx - 1)] + 7) + 12), 8, 2040); this.c1.fill(0); this.c2.fill(0); this.lp1 = this.lp2 = 0; this.pn = P; } }
   start(s) { const c = this.n[this.ni]; this.ni = (this.ni + 1) % this.n.length; const sr = this.sr, [, f, g, pn] = s, kind = this.kind; c.on = 1; c.t = 0; c.f = f; c.ft = f; c.g = g; c.e = 0; c.ph = 0; c.ph2 = 0; c.acc = s[4] || 0;
     c.gl = Math.cos((pn + 1) * Math.PI / 4) * 1.414; c.gr = Math.sin((pn + 1) * Math.PI / 4) * 1.414;
     if (kind === 7) { c.k = Math.exp(-1 / (0.2 * sr)); c.ix = 3.2; c.ik = Math.exp(-1 / (0.035 * sr)); }
     else if (kind === 8 || kind === 12) { c.kn = clamp(Math.round(sr / f), 8, CANDY_KS - 1); c.ki = 0; c.kz = 0; let z1 = 0, z2 = 0; for (let i = 0; i < c.kn; i++) { z1 += (noise() - z1) * 0.5; z2 += (z1 - z2) * 0.5; c.ks[i] = z2 * 1.6 * Math.sin(Math.PI * i / c.kn); } /* (a burst low-passed twice and windowed: a round pluck, not a click) */ c.kd = kind === 8 ? 0.45 + 0.25 * g : 0.6 - 0.12 * this.ni; c.k = Math.exp(-1 / ((kind === 8 ? 0.6 : 0.35) * sr)); }
+    else if (kind === 14) { c.k = Math.exp(-1 / (0.012 * sr)); c.ix = 1.2; c.ik = Math.exp(-1 / (0.004 * sr)); }
+    else if (kind === 15) { c.k = Math.exp(-1 / (0.38 * sr)); c.ft = f * 0.985; }
+    else if (kind === 16) { c.svf.reset(); c.svf.set(f, 28, sr); c.k = 0; c.len = Math.round(0.0015 * sr); }
+    else if (kind === 17) { c.k = Math.exp(-1 / (0.09 * sr)); c.svf.reset(); c.svf.set(1100, 1.1, sr); c.ph = (noise() + 1) * 0.5; }
+    else if (kind === 18) { c.f = f * 0.5; c.ft = f; c.k = Math.exp(-1 / (0.04 * sr)); }
+    else if (kind === 19) { c.k = 1; c.len = Math.round(0.009 * sr); }
     else if (kind === 11) { const prev = this.n[(this.ni + this.n.length - 2) % this.n.length]; const sp = this.dur / 4; if (s[5] && prev.on) { prev.ft = f; prev.acc = c.acc; prev.len += sp; c.on = 0; return; } c.len = sp * 0.85; c.k = Math.exp(-1 / (0.11 * sr)); c.svf.reset(); } }
   render(oL, oR, n, gain) { const sr = this.sr, inv = 1 / sr, atk = (this.kind === 8 || this.kind === 12 ? 0.003 : 0.001) * sr; /* (a pluck's attack over 3 ms: round, not spiky) */ let alive = 0;
     for (let i = 0; i < n; i++) { if (this.wait > 0) { this.wait--; continue; } const t = this.t++; while (this.si < this.seq.length && this.seq[this.si][0] <= t) this.start(this.seq[this.si++]);
@@ -37,7 +56,14 @@ class CandyVoice {
           this.lp1 += (this.c1[j1] - this.lp1) * 0.55; this.lp2 += (this.c2[j2] - this.lp2) * 0.55; this.c1[this.ci] = x + this.lp1 * 0.965; this.c2[this.ci] = x + this.lp2 * 0.96; this.ci = (this.ci + 1) & (N - 1);
           const pn = clamp(this.pn + 0.8 * Math.sin(TAU * p * 1.5), -1, 1), gl = Math.cos((pn + 1) * Math.PI / 4) * 1.414, gr = Math.sin((pn + 1) * Math.PI / 4) * 1.414, y1 = this.lp1, y2 = this.lp2; yl = (y1 * 0.8 + y2 * 0.4) * gl; yr = (y2 * 0.8 + y1 * 0.4) * gr; alive = 1; } }
       else for (const c of this.n) { if (!c.on) continue; alive = 1; const ct = c.t++; const a = ct < atk ? ct / atk : 1; let y = 0;
-        if (this.kind === 7) { c.ph += c.f * inv; if (c.ph >= 1) c.ph -= 1; c.ph2 += c.f * 3.5 * inv; if (c.ph2 >= 1) c.ph2 -= 1; c.e = ct < atk ? a : c.e * c.k; y = sin1(c.ph + 0.16 * c.ix * sin1(c.ph2)) * c.e * c.g; c.ix *= c.ik; if (c.e < 1e-4 && ct > atk) c.on = 0; }
+        if (this.kind >= 14) { const K = this.kind;
+          if (K === 14) { c.ph += c.f * inv; if (c.ph >= 1) c.ph -= 1; c.ph2 += c.f * 2 * inv; if (c.ph2 >= 1) c.ph2 -= 1; c.e = ct < atk ? a : c.e * c.k; y = sin1(c.ph + 0.1 * c.ix * sin1(c.ph2)) * c.e * c.g; c.ix *= c.ik; if (c.e < 1e-4 && ct > atk) c.on = 0; }
+          else if (K === 15) { c.f += (c.ft - c.f) * 2e-5; c.ph += c.f * inv; if (c.ph >= 1) c.ph -= 1; c.e = ct < atk * 3 ? ct / (atk * 3) : c.e * c.k; y = sin1(c.ph) * c.e * c.g; if (c.e < 1e-4 && ct > atk * 3) c.on = 0; }
+          else if (K === 16) { const x = ct < c.len ? noise() * (1 - ct / c.len) : 0; c.svf.run(x); y = c.svf.bp * c.g * 4; if (ct > 0.15 * sr) c.on = 0; }
+          else if (K === 17) { c.ph += c.f * inv; if (c.ph >= 1) c.ph -= 1; c.e = ct < atk * 2 ? ct / (atk * 2) : c.e * c.k; c.svf.run(2 * c.ph - 1 - blep(c.ph, c.f * inv)); y = c.svf.lp * c.e * c.g; if (c.e < 1e-4 && ct > atk * 2) c.on = 0; }
+          else if (K === 18) { c.f += (c.ft - c.f) * (1 - Math.exp(-1 / (0.008 * sr))); c.ph += c.f * inv; if (c.ph >= 1) c.ph -= 1; c.e = ct < atk ? a : c.e * c.k; y = sin1(c.ph) * c.e * c.g; if (c.e < 1e-4 && ct > atk) c.on = 0; }
+          else { c.ph += c.f * inv; if (c.ph >= 1) c.ph -= 1; c.ph2 += c.f * 1.5 * inv; if (c.ph2 >= 1) c.ph2 -= 1; const r = 0.001 * sr, gt = ct < r ? ct / r : ct > c.len - r ? Math.max(0, (c.len - ct) / r) : 1; y = sin1(c.ph + 0.25 * sin1(c.ph2)) * gt * c.g; if (ct >= c.len) c.on = 0; } }
+        else if (this.kind === 7) { c.ph += c.f * inv; if (c.ph >= 1) c.ph -= 1; c.ph2 += c.f * 3.5 * inv; if (c.ph2 >= 1) c.ph2 -= 1; c.e = ct < atk ? a : c.e * c.k; y = sin1(c.ph + 0.16 * c.ix * sin1(c.ph2)) * c.e * c.g; c.ix *= c.ik; if (c.e < 1e-4 && ct > atk) c.on = 0; }
         else if (this.kind === 8 || this.kind === 12) { const j = c.ki, nx = j + 1 === c.kn ? 0 : j + 1, v = (c.ks[j] + c.ks[nx]) * 0.5; c.kz += (v - c.kz) * c.kd; c.ks[j] = c.kz * 0.996; c.ki = nx; c.e = ct < atk ? a : (c.e || 1) * c.k; y = c.kz * c.e * c.g * 1.6; if (ct > sr * 1.5) c.on = 0; }
         else { c.f += (c.ft - c.f) * 0.004; c.ph += c.f * inv; if (c.ph >= 1) c.ph -= 1; c.e = ct < atk ? a : c.e * c.k; if ((ct & 15) === 0) c.svf.set(c.f * (1.3 + (6 + 10 * c.acc) * c.e), 7 + 4 * c.acc, sr); c.svf.run(2 * c.ph - 1); y = tanh(c.svf.lp * (1.4 + c.acc)) * Math.max(c.e, 0.12) * c.g * 0.7 * (ct > c.len ? Math.max(0, 1 - (ct - c.len) / (0.004 * sr)) : 1); if (ct > c.len + 0.004 * sr) c.on = 0; }
         yl += y * c.gl; yr += y * c.gr; }

@@ -29,7 +29,7 @@ class Deck {
     this.kick = new Kick(sr); this.snare = new Snare(sr); this.hats = new Hats(sr); this.perc = new Perc(sr);
     this.bass = new Synth(sr, 2, true); this.chords = new Synth(sr, 14, false); this.pad = new Synth(sr, 12, false);
     this.leadMono = new Synth(sr, 2, true); this.leadPoly = new Synth(sr, 6, false); this.lead = this.leadPoly; this.arp = new Synth(sr, 8, false);
-    this.bankP = new BankPlayer(sr); this.fx = new Fx(sr); this.tex = new Texture(sr); this.mix = new DeckMix(sr); this.synths = [this.bass, this.chords, this.pad, this.leadMono, this.leadPoly, this.arp];
+    this.bankP = new BankPlayer(sr); this.fx = new Fx(sr); this.tex = new Texture(sr); this.atK = -1; this.atL = 1; this.atT = 0; this.texK = 0; this.texV = 0; this.setCandy({ allow: CANDY_DEFAULT, level: 1, density: 1, tx: 1, txLevel: 1 }); this.mix = new DeckMix(sr); this.synths = [this.bass, this.chords, this.pad, this.leadMono, this.leadPoly, this.arp];
     this.ev = null; this.N = 0; this.ei = 0; this.pos = 0; this.bpm = 124; this.sps = 1; this.playing = 0; this.sections = null; this.secIdx = 0; this.bars = 0; this.loaded = 0;
     this.opt = { slide: false, accent: false, bright: 1, lfo: 0, pan: 0, vowel: 'a', from: 0, fit: false }; this.reg = new Int8Array(NCH); this.loopFrom = -1; this.loopTo = -1; this.chanOn = new Uint8Array(NCH).fill(1);
     this.arr = null; this.mixLift = null; this.energy = 0.5; this.autoCur = new Float64Array(AUTO_N); this.autoTgt = new Float64Array(AUTO_N); this.autoRate = new Float64Array(AUTO_N); this.space = null; this.wetness = 1; this.liveEch = new Float32Array(NCH).fill(-1); this.fill = null; this.density = 0.5; this.swingX = 0; this.repCode = 0; this.live = { repeat: 0, tape: 0, swirl: 0 }; this.gid = ''; this.sec = null; this.secP = 0; this.ended = 0; this.jumpAt = -1; this.jumpTo = 0; this.glideRate = 0; this.glideTo = 0; this.txRest = 0; this.score = null; this.cal = null; this.pend = null; this.pendAt = -1; shape(this); this.setBpm(124); }
@@ -109,7 +109,7 @@ class Deck {
     this.autoCur[20 + 13] = this.autoTgt[20 + 13] = 0; this.autoCur[20 + 14] = this.autoTgt[20 + 14] = 1; this.applyAuto(); this.texAt(step); } // a jump never lands inside a repeat or a tape stop
   // texture state at a position (after a jump the bed has the level and the chord of where the music is, not of where it was)
   texAt(step) { const E = this.ev; if (!E) return; let lv = -1, ck = -1; for (let i = 0; i < this.N && E.t[i] < step; i++) if (E.ch[i] === 10) { if (E.d[i] < 0) ck = i; else lv = i; }
-    if (ck >= 0) { this.tex.setChord(E.f[ck], E.x[ck]); this.mix.reso.setChord(E.f[ck], E.x[ck]); this.fx.mask = E.f[ck]; this.fx.root = E.x[ck]; } if (lv >= 0) this.tex.set(E.a[lv] | 0, E.v[lv], this.sr * 0.15); else this.tex.set(this.tex.kind, 0, this.sr * 0.15); }
+    if (ck >= 0) { this.tex.setChord(E.f[ck], E.x[ck]); this.mix.reso.setChord(E.f[ck], E.x[ck]); this.fx.mask = E.f[ck]; this.fx.root = E.x[ck]; } if (lv >= 0) this.texSet(E.a[lv] | 0, E.v[lv], this.sr * 0.15); else this.texSet(this.texK || 0, 0, this.sr * 0.15); }
   // live motion (the performance pads): a held pad takes the unit over; on release the score's automation has it back
   liveMotion(name, on, amt) { const M = this.mix.motion, a = amt == null ? 0.5 : amt; this.live[name] = on ? 1 : 0;
     if (name === 'repeat') M.setRepeat(on ? (a < 0.34 ? 2 : a < 0.67 ? 3 : 4) : this.repCode);
@@ -146,9 +146,12 @@ class Deck {
       case 1: this.hitSnare(off, v, SNARE_KIND[a | 0]); break;
       case 2: this.hitHat(off, v, a | 0, E.y[i]); break;
       case 3: this.hitPerc(off, v, PERC_NAMES[(f >> 2) & 31] || 'conga', a, E.y[i]); break;
-      case 9: this.fx.trigger(off, a | 0, v, E.d[i] * this.sps, E.x[i], E.y[i], E.f[i]); break; // x = the note an ear-candy FX lands on, y = its pan (0 = the engine picks)
+      case 9: { let k = a | 0, vv = v; const candy = (k >= 7 && k <= 12) || (k >= 14 && k <= 19); // (v10.1) the ear candy and the transitions, as you set them (FX · Ear candy)
+        if (candy) { if (this.cDen < 1 && (Math.imul(i + 7, 2654435761) >>> 0) / 4294967296 >= this.cDen) break; if (!(this.cAllow & (1 << k))) { const C = this.cList; if (!C.length) break; k = C[(Math.imul(i + 3, 40503) >>> 0) % C.length]; } vv *= this.cLvl; } // a type you switched off is replaced by one you kept (same place, same length)
+        else { if (!this.txOn) break; vv *= this.txLvl; }
+        this.fx.trigger(off, k, vv, E.d[i] * this.sps, E.x[i], E.y[i], E.f[i]); break; } // x = the note an ear-candy FX lands on, y = its pan (0 = the engine picks)
       case 11: { if (a < 0) { if (a === -2) this.mix.kick(off, v); break; } /* (v10) -2: a ghost pump — the sidechain breathes on the beat with no kick (v = depth) */ const k = autoIndex(a, f), d = E.d[i]; this.autoTgt[k] = v; this.autoRate[k] = d > 0.01 && !AUTO_STEP.has(k) ? Math.abs(v - this.autoCur[k]) / d : 1e9; break; } // automation: see autoIndex — a target and a ramp over d steps
-      case 10: if (E.d[i] < 0) { this.tex.setChord(f, E.x[i]); this.mix.reso.setChord(f, E.x[i]); this.fx.mask = f; this.fx.root = E.x[i]; } else this.tex.set(a | 0, v, E.d[i] * this.sps); break; // texture level ramp, or (d < 0) the chord: the texture and the resonator tune to it
+      case 10: if (E.d[i] < 0) { this.tex.setChord(f, E.x[i]); this.mix.reso.setChord(f, E.x[i]); this.fx.mask = f; this.fx.root = E.x[i]; } else this.texSet(a | 0, v, E.d[i] * this.sps); break; // texture level ramp, or (d < 0) the chord: the texture and the resonator tune to it
       default: { const syn = ch === 4 ? this.bass : ch === 5 ? this.chords : ch === 6 ? this.pad : ch === 7 ? this.lead : this.arp;
         o.slide = !!(f & 1); o.accent = !!(f & 2); o.bright = E.x[i] || 1; o.lfo = ch === 4 ? E.y[i] : 0; o.vowel = ch === 7 && E.y[i] > 0 ? VOWEL_LIST[(E.y[i] - 1) | 0] : 'a'; o.pan = (ch === 5 || ch === 6 || ch === 8) && a >= 52 ? SPREAD[(a | 0) % 12] : 0; o.fit = (ch === 5 || ch === 6) && E.d[i] >= 8;
         if (this.reg[ch]) { const rn = this.regNote(ch, a), sh = (rn - a) / 12; o.bright *= Math.pow(2, -0.25 * sh); syn.trigger(off, rn, v * Math.pow(10, -0.075 * sh), E.d[i] * this.sps, o); break; } // (each note by how far it really moved: a folded one is not compensated)
@@ -186,9 +189,19 @@ class Deck {
     this.kick.render(M.bufL[0], M.bufR[0], n); this.snare.render(M.bufL[1], M.bufR[1], n); this.hats.render(M.bufL[2], M.bufR[2], n); this.perc.render(M.bufL[3], M.bufR[3], n); this.bankP.render(M.bufL, M.bufR, n);
     this.bass.render(M.bufL[4], M.bufR[4], n); this.chords.render(M.bufL[5], M.bufR[5], n); this.pad.render(M.bufL[6], M.bufR[6], n);
     this.leadMono.render(M.bufL[7], M.bufR[7], n); this.leadPoly.render(M.bufL[7], M.bufR[7], n); this.arp.render(M.bufL[8], M.bufR[8], n);
-    this.fx.render(M.bufL[9], M.bufR[9], n); this.tex.render(M.bufL[10], M.bufR[10], n);
+    this.fx.render(M.bufL[9], M.bufR[9], n); this.tex.render(M.bufL[10], M.bufR[10], n); if (this.atT) this.atmosTone(M.bufL[10], M.bufR[10], n);
     M.mix(n);
   }
+  // (v10.1) THE ATMOSPHERE, yours to set: atK the background (−1: the track's own, 0: none, 1 vinyl · 2 air · 3 dark · 4 psy · 5 rain), atL its
+  // level (× the track's, 0…2 — a track without one gets a steady bed at 0.35 × it), atT its tone (−1 dark … 0 … +1 bright, a 6 dB/oct tilt)
+  texSet(k, v, ramp) { this.texK = k; this.texV = v; const K = this.atK >= 0 ? this.atK : k, L = this.atK > 0 && (k === 0 || !(v > 1e-4)) ? 0.35 * this.atL : v * this.atL; this.tex.set(K, K ? L : 0, ramp); }
+  setAtmos(m) { if (m.kind != null) this.atK = clamp(m.kind | 0, -1, 5); if (m.level != null) this.atL = clamp(+m.level || 0, 0, 2); if (m.tone != null) this.atT = clamp(+m.tone || 0, -1, 1); this.texSet(this.texK || 0, this.texV || 0, this.sr * 0.3); }
+  atmosTone(L, R, n) { const t = this.atT, f = t < 0 ? 16000 * Math.pow(0.05, -t) : 30 * Math.pow(60, t), a = 1 - Math.exp(-TAU * f / this.sr); let l = this.atzL || 0, r = this.atzR || 0;
+    if (t < 0) for (let i = 0; i < n; i++) { l += (L[i] - l) * a; r += (R[i] - r) * a; L[i] = l; R[i] = r; } else for (let i = 0; i < n; i++) { l += (L[i] - l) * a; r += (R[i] - r) * a; L[i] -= l; R[i] -= r; }
+    this.atzL = Math.abs(l) < 1e-20 ? 0 : l; this.atzR = Math.abs(r) < 1e-20 ? 0 : r; }
+  // (v10.1) the ear candy and the transitions: allow a bitmask of candy kinds (bit k = kind k: 7 glass · 8 harp · 9 bubbles · 10 wind · 11 acid · 12 ping ·
+  // 14 blip · 15 sonar · 16 click · 17 dub · 18 drop · 19 glitch), level 0…2, density 0…1 (the share of the track's candy that plays), tx: risers and impacts on / off, txLevel 0…2
+  setCandy(m) { if (m.allow != null) { this.cAllow = m.allow >>> 0; this.cList = []; for (const k of CANDY_KINDS) if (this.cAllow & (1 << k)) this.cList.push(k); } if (m.level != null) this.cLvl = clamp(+m.level || 0, 0, 2); if (m.density != null) this.cDen = clamp(+m.density || 0, 0, 1); if (m.tx != null) this.txOn = m.tx ? 1 : 0; if (m.txLevel != null) this.txLvl = clamp(+m.txLevel || 0, 0, 2); }
   seekKeep(step) { const t = this.ev.t; let lo = 0, hi = this.N; while (lo < hi) { const m = (lo + hi) >> 1; if (t[m] < step) lo = m + 1; else hi = m; } this.ei = lo; this.pos = step; }
   automate() { // arrangement automation from the section map
     const bar = Math.floor(this.pos / 16); const si = this.sectionAt(bar); this.secIdx = si; const S = this.sections[si];
