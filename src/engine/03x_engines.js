@@ -37,7 +37,7 @@ function initX(S, v, P, f, opt) { const sr = S.sr, m = S.m;
     v.e1 = 1; v.d1 = Math.exp(-1 / ((0.0006 + 0.004 * (1 - P.hard)) * sr)); v.e2 = 0.25 + 0.75 * P.hard; }
   else if (m === MODEL.grain) { // the texture the grains read: exactly periodic over the buffer, so a grain can cross its end without a click
     const Lb = 2400, k = Math.max(1, Math.round(Lb * f / sr)), fb = k * sr / Lb; v.kl = Lb; v.d2 = fb; /* read at f / fb: the exact pitch, glide included */ let a = 0, b = 0, c = 0, lp = 0, mx = 1e-9;
-    for (let i = 0; i < Lb; i++) { a += k / Lb; if (a >= 1) a -= 1; b += k / Lb; if (b >= 1) b -= 1; c += 2 * k / Lb; if (c >= 1) c -= 1; const bb = b + 0.37 >= 1 ? b - 0.63 : b + 0.37, s = (2 * a - 1) * 0.5 + (2 * bb - 1) * 0.35 + /* (every layer a whole number of cycles over the buffer: the texture is exactly periodic, in tune) */ Math.sin(TAU * c) * 0.3 + noise() * P.noiseAmt; lp += (s - lp) * (0.15 + 0.8 * P.bright); v.ks[i] = lp; mx = Math.max(mx, Math.abs(lp)); }
+    for (let i = 0; i < Lb; i++) { a += k / Lb; if (a >= 1) a -= 1; b += k / Lb; if (b >= 1) b -= 1; c += 2 * k / Lb; if (c >= 1) c -= 1; const bb = b + 0.37 >= 1 ? b - 0.63 : b + 0.37, s = (2 * a - 1 - blep(a, k / Lb)) * 0.5 + (2 * bb - 1 - blep(bb, k / Lb)) * 0.35 + /* (every layer a whole number of cycles over the buffer: the texture is exactly periodic, in tune; v10: the saws band-limited by PolyBLEP — a naive saw at a high note folded back as inharmonic hash, 30–38 dB at 2 kHz against a 192 kHz render) */ Math.sin(TAU * c) * 0.3 + noise() * P.noiseAmt; lp += (s - lp) * (0.15 + 0.8 * P.bright); v.ks[i] = lp; mx = Math.max(mx, Math.abs(lp)); }
     for (let i = 0; i < Lb; i++) v.ks[i] /= mx; for (let g = 0; g < 4; g++) { v.ph[g] = (g * 613) % Lb; v.ph[4 + g] = g / 4; } }
   else if (m === MODEL.pluck2) { const per = clamp(sr / f, 9, 2390), Li = Math.floor(per - 0.6), dl = per - Li - 0.5; v.kl = Li; v.kz = (1 - dl) / (1 + dl); v.apx = 0; v.apy = 0;
     // (v9.5) the string's shape when it is let go — a triangle peaking at the pick position, as a real pluck — with a little noise for the
@@ -51,6 +51,18 @@ function initX(S, v, P, f, opt) { const sr = S.sr, m = S.m;
     v.kw = N;
     const bf = 90 + 260 * P.body; v.s2.set(bf, 2.2, sr); v.s3.set(bf * 2.6, 3, sr); v.s2.reset(); v.s3.reset(); }
   else if (m === MODEL.hyper || m === MODEL.va || m === MODEL.pd || m === MODEL.add) { v.d2 = -1; for (let k = 0; k < 9; k++) v.ph[k] = m === MODEL.hyper ? ((Math.imul(k + 1, 2654435761) ^ v.e3) >>> 0) / 4294967296 : 0; for (let k = 0; k < 8; k++) v.pa[k] = 0; } }
+// (v10) fm4's index scaling: Carson's rule on every modulator (its sidebands reach ≈ the carrier + its frequency × (2π · index + 1));
+// where that passes 0.42 × the sample rate, that modulator's index is held so it does not (a modulator above the edge: 0). A low or middle note is untouched (scale 1); a high
+// note keeps its brightness up to the band edge instead of folding back as inharmonic junk (measured on the bank: 15–100 dB of
+// energy at 48 kHz that a 192 kHz render does not have). The modulator envelope still moves the timbre underneath.
+function fm4Nyq(P, f, sr, idxS, out) { const lim = 0.42 * sr, fc = f * Math.max(P.r1 || 1, 1), w = 2 * Math.PI * idxS; // (Carson, per modulator: fc + fm·(β + 1) under the edge → β ≤ (edge − fc) / fm − 1)
+  const R = [P.r2, P.r3, P.r4], I = [P.i2, P.i3, P.i4]; for (let k = 0; k < 3; k++) { const fm = f * (R[k] || 0), b = w * Math.abs(I[k] || 0); if (fm <= 0 || b <= 0) { out[k] = 1; continue; } const bMax = Math.max(0, (lim - fc) / fm - 1); out[k] = b <= bMax ? 1 : bMax / b; }
+  // and a cascade (one modulator into another) spreads by the sum: the chain's whole spread is held under the edge too
+  let spread = 0; for (let k = 0; k < 3; k++) { const fm = f * (R[k] || 0), b = w * Math.abs(I[k] || 0) * out[k]; if (fm > 0 && b > 0) spread += fm * (b + 1); }
+  if (fc + spread > lim && spread > 0) { const g = Math.max(0, (lim - fc) / spread); for (let k = 0; k < 3; k++) out[k] *= g; }
+  { const f4 = f * (P.r4 || 1), bf = 2 * Math.PI * Math.abs(P.fb || 0) * 0.5; out[3] = bf <= 0 ? 1 : Math.min(1, Math.max(0, lim / f4 - 1) / (bf * 3)); } // feedback: operator 4 turns into a saw-like wave — its harmonics held under the edge too
+  return out; }
+const FM4NY = new Float64Array(4);
 // one voice of a new engine, one block (same contract as Synth.voice)
 Synth.prototype.voiceX = function (v, L, R, n) {
   const sr = this.sr, inv = 1 / sr, P = v.p, m = v.m;
@@ -63,8 +75,9 @@ Synth.prototype.voiceX = function (v, L, R, n) {
   const flt = P.flt >= 0 ? P.flt | 0 : (m === MODEL.pluck2 || m === MODEL.modal || m === MODEL.add || m === MODEL.grain ? 0 : 2), dty = P.dtype | 0, drv = P.drv, wide = P.stereo;
   const vel = v.vel, idxS = (0.45 + 0.55 * vel) * (0.5 + P.bright), eco = ECO.level >= 2;
   const p_body = P.body, p_bright = P.bright, p_density = P.density, p_det2 = P.det2, p_detune = P.detune, p_fmorph = P.fmorph, p_gjit = P.gjit, p_gsize = P.gsize, p_hard = P.hard, p_i2 = P.i2, p_i3 = P.i3, p_i4 = P.i4, p_lfoShape = P.lfoShape, p_lfoSync = P.lfoSync, p_oct2 = P.oct2, p_osc1 = P.osc1, p_osc2 = P.osc2, p_pdw = P.pdw, p_pw = P.pw, p_ring = P.ring, p_scan = P.scan, p_stretch = P.stretch, p_sync = P.sync, p_xmod = P.xmod; // (the kit's values used per sample, in locals: a property load in the sample loop cost twice the FM voice)
-  const fmS = P.ms, fmD = v.d1, fmI2 = P.i2 * idxS, fmI3 = P.i3 * idxS, fmI4 = P.i4 * idxS, fmAl = P.algo | 0, fmR1 = P.r1, fmR2 = P.r2, fmR3 = P.r3, fmR4 = P.r4, fmFb = P.fb * 0.5; // (fm4: the block's constants in locals)
-  let e1 = v.e1, e2 = v.e2, e3 = v.e3 >>> 0, crushH = 0, crushC = 0, sideLp = v.d3, dcz = v.mph; const smallDt = Math.abs(P.det2) < 1, r1x = smallDt && !(P.sync > 0) ? Math.pow(2, -P.det2 / 24) : 1, r2 = Math.pow(2, P.oct2 + (smallDt ? P.det2 / 24 : P.det2 / 12)), dcA = TAU * 8 * inv; // dcz: the DC blocker (8 Hz) every engine ends with
+  const fmNy = m === 25 ? fm4Nyq(P, v.f, sr, idxS, FM4NY) : null; // (v10) keyboard scaling against aliasing: a high note's modulation indices are held where its sidebands stay under 0.42 × the sample rate
+  const fmS = P.ms, fmD = v.d1, fmI2 = P.i2 * idxS * (fmNy ? fmNy[0] : 1), fmI3 = P.i3 * idxS * (fmNy ? fmNy[1] : 1), fmI4 = P.i4 * idxS * (fmNy ? fmNy[2] : 1), fmAl = P.algo | 0, fmR1 = P.r1, fmR2 = P.r2, fmR3 = P.r3, fmR4 = P.r4, fmFb = P.fb * 0.5 * (fmNy ? fmNy[3] : 1); // (fm4: the block's constants in locals)
+  let e1 = v.e1, e2 = v.e2, e3 = v.e3 >>> 0, crushH = 0, crushC = 0, sideLp = v.d3, dcz = v.mph, sLow = v.sLow || 0, sLow2 = v.sLow2 || 0; const sideHpA = 1 - Math.exp(-TAU * 150 / sr); /* (v10) the stereo part of a voice high-passed at 150 Hz: its sub is mono — unison and two-oscillator spreads put the fundamental in the side (a formant bass measured −0.46 correlation under 150 Hz: the club's mono sum cancelled its sub) */ const smallDt = Math.abs(P.det2) < 1, r1x = smallDt && !(P.sync > 0) ? Math.pow(2, -P.det2 / 24) : 1, r2 = Math.pow(2, P.oct2 + (smallDt ? P.det2 / 24 : P.det2 / 12)), dcA = TAU * 8 * inv; // dcz: the DC blocker (8 Hz) every engine ends with
   while (i < n) {
     if (v.wait > 0) { const w = Math.min(v.wait, n - i); v.wait -= w; len -= w; i += w; if (i >= n) break; }
     const end = Math.min(n, i + (fstage === 0 || tt < 256 ? 4 : 16));
@@ -154,9 +167,9 @@ Synth.prototype.voiceX = function (v, L, R, n) {
       if (flt) { sideLp += (side - sideLp) * sideA; if (sideLp < 1e-20 && sideLp > -1e-20) sideLp = 0; side = sideLp; }
       // the drive
       if (dty === 4) { if (crushC-- <= 0) { crushC = (drv * 5) | 0; crushH = xDrive(4, y, drv, 0); } y = crushH; } else if (dty) y = xDrive(dty, y, drv, 0);
-      dcz += (y - dcz) * dcA; y -= dcz; if (subA) { sph += dt; if (sph >= 1) sph -= 1; y += sin1(sph) * subA; } /* (v9.4) a sine on the fundamental, after the filter and the drive: a plucked or struck bass keeps its low end in a club mix */ const g = env * outG * am, o = y * g, sg = side * g; L[i] += (o - sg) * gL; R[i] += (o + sg) * gR;
+      dcz += (y - dcz) * dcA; y -= dcz; sLow += (side - sLow) * sideHpA; side -= sLow; sLow2 += (side - sLow2) * sideHpA; side -= sLow2; /* (two poles: 12 dB/octave) */ if (subA) { sph += dt; if (sph >= 1) sph -= 1; y += sin1(sph) * subA; } /* (v9.4) a sine on the fundamental, after the filter and the drive: a plucked or struck bass keeps its low end in a club mix */ const g = env * outG * am, o = y * g, sg = side * g; L[i] += (o - sg) * gL; R[i] += (o + sg) * gR;
     }
     if (!alive) break;
   }
-  v.env = env; v.stage = stage; v.fenv = fenv; v.fstage = fstage; v.f = f; v.lfo = lfo; v.t = tt; v.len = len; v.relFast = relFast; v.fadeIn = fadeIn; v.ag = ag; v.e1 = e1; v.e2 = e2; v.e3 = e3; v.d3 = sideLp; v.mph = dcz; v.sph = sph;
+  v.env = env; v.stage = stage; v.fenv = fenv; v.fstage = fstage; v.f = f; v.lfo = lfo; v.t = tt; v.len = len; v.relFast = relFast; v.fadeIn = fadeIn; v.ag = ag; v.e1 = e1; v.e2 = e2; v.e3 = e3; v.d3 = sideLp; v.mph = dcz; v.sph = sph; v.sLow = sLow < 1e-20 && sLow > -1e-20 ? 0 : sLow; v.sLow2 = sLow2 < 1e-20 && sLow2 > -1e-20 ? 0 : sLow2;
   if (!alive) { v.on = 0; v.relFast = 0; v.fadeIn = -1; } };

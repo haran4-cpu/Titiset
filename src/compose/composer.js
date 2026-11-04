@@ -26,6 +26,7 @@ const DROP_GAP = 2; // the half-beat of silence at the very end of a build, befo
 const PROD = { house: { crash: 1, rev: 1, kickMute: 1 }, techno: { crash: 0.6, rev: 0.7, kickMute: 1 }, trance: { crash: 1, rev: 1, kickMute: 0 }, psy: { crash: 0.7, rev: 0.8, kickMute: 1 },
   dnb: { crash: 1, rev: 1 }, bass: { crash: 1, rev: 1 }, hiphop: { crash: 0.5, rev: 0.8 }, garage: { crash: 0.8, rev: 1 }, afro: { crash: 0.7, rev: 0.8, kickMute: 1 }, hard: { crash: 1, rev: 1 },
   pop: { crash: 1, rev: 1 }, breaks: { crash: 1, rev: 0.8 }, latin: { crash: 0.8, rev: 0.8 }, chill: { rev: 0.6 }, ambient: { rev: 0.5 } };
+const BASS_OUT = new Set(['house', 'techno', 'trance', 'psy', 'bass', 'garage', 'hard']);
 const TOM_FAM = new Set(['house', 'techno', 'afro', 'dnb', 'breaks', 'garage', 'latin', 'trance', 'pop', 'hard', 'psy']);
 const TEX_KIND = { none: 0, vinyl: 1, air: 2, dark: 3, psyfx: 4, rain: 5 };
 
@@ -414,6 +415,9 @@ function writeAuto(G, sec, S) { const t0 = sec.bar0 * 16, B = sec.bars * 16, has
   const A = (slot, param, atBars, value, overBars) => { if (has[slot] && atBars * 16 < B) S.push(t0 + atBars * 16, CH.auto, AUTO_SLOT[slot], value, Math.max(0.5, overBars * 16), param, 0, 0); };
   const tone = ['chords', 'pad', 'lead', 'arp'], fam = AUTO_FAM[G.id], half = sec.bars / 2;
   if (sec.type === 'break') { for (const k of ['chords', 'pad']) { A(k, 0, 0, -1.3, 2); A(k, 0, half, 0, half); } A('lead', 0, 0, -0.6, 2); A('lead', 0, half, 0, half); }
+  // (v10) the breakdown BREATHES: in trance, progressive house and melodic techno the pads keep pumping on the beat with no kick (a ghost
+  // sidechain, shallower than the kick's at first: 0.5 → 0.8 of it over the breakdown) — the pulse of the drop is felt before the drums come back
+  if (sec.type === 'break' && fam === 'bloom' && (has.pad || has.chords)) for (let st = 0; st < B; st += 4) S.push(t0 + st, CH.auto, -2, 0.5 + 0.3 * st / B, 0, 0, 0, 0);
   else if (sec.type === 'build') { for (const k of tone) { A(k, 0, 0, -0.5, 1); A(k, 0, 1, 0.45, sec.bars - 1); A(k, 1, 0, 0.12, sec.bars); } A('bass', 0, 0, -0.8, sec.bars); }
   else if (sec.type === 'drop') { for (const k of [...tone, 'bass']) { A(k, 0, 0, 0, 0.03); A(k, 1, 0, 0, 0.03); } }
   else if (sec.type === 'groove' || sec.type === 'intro' || sec.type === 'outro') { for (const k of tone) A(k, 1, 0, 0, 1); if (sec.bars >= 16 && fam !== 'filter') for (let b = 0; b < sec.bars; b += 16) { A('chords', 0, b, -0.7, 2); A('chords', 0, b + 2, 0, 14); } }
@@ -717,7 +721,10 @@ function composeTrack(gid, seed, o) {
         const evs = parsePat(pat), accS = G.bass.pats[bvI] && G.bass.pats[bvI].acc ? laneBar(G.bass.pats[bvI].acc, b) : null; let prevNote = null; // (v9.5) the pattern's accent lane: an accented note opens the filter further (the 303 accent)
         if (phraseBar === 7 && b !== sec.bars - 1 && evs.length) { const lastE = evs[evs.length - 1]; if (lastE.len <= 2 && /[RO]/i.test(lastE.ch)) { const sl = lastE.ch !== lastE.ch.toUpperCase(); lastE.ch = nRootDiffers(P, c, cNext) ? (sl ? 'a' : 'A') : (sl ? 'o' : 'O'); } } // phrase turnaround
         const wob = G.bass.wobble ? G.bass.wobble[(b + (phraseBar >> 1)) % G.bass.wobble.length] : 0;
-        for (const e of evs) { if (e.step >= silentFrom) continue;
+        // (v10) the bass steps out for the last two beats of a build into a drop (two builds in three, house, techno, trance, psy, bass music,
+        // garage): the drop's first bass note lands into a gap — the oldest trick for making the drop hit
+        const bassOut = sec.type === 'build' && sec.nextType === 'drop' && b === sec.bars - 1 && BASS_OUT.has(G.family) && hashStr(P.seed + '/bo' + sec.bar0) % 3 !== 0 ? 8 : 99;
+        for (const e of evs) { if (e.step >= silentFrom || e.step >= bassOut) continue;
           const tk = e.ch.toUpperCase(), slide = e.ch !== tk;
           let m = root;
           switch (tk) { case 'O': m = root + 12; break; case 'F': m = root + 7 > P.tonicBass + 9 ? root - 5 : root + 7; break; case 'T': m = root + (minor ? 3 : 4); break;

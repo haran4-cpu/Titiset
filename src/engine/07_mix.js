@@ -202,7 +202,7 @@ class DeckMix {
   setEco(on) { this.eco = on ? 1 : 0; this.setCharacter(this.heat, this.punch); }
   setCharacter(heat, punch) { const h = heat == null ? 1 : heat, p = punch == null ? 1 : punch, sr = this.sr, on = this.eco ? 0 : 1; this.heat = h; this.punch = p;
     for (let c = 0; c < NCH; c++) { const s = this.s[c]; stripCharacter(s, c, h * on, p * on, sr); if (this.uTr && (this.uTr[c] || this.uSat[c])) { s.tr = clamp(s.tr + 0.9 * this.uTr[c], 0, 1.6); s.kS = 1 - Math.exp(-1 / ((0.014 - 0.0105 * this.uTr[c]) * sr)); s.sat = clamp(s.sat + 0.75 * this.uSat[c], 0, 1); s.kL = 1 - Math.exp(-TAU * Math.min(0.45 * sr, 17000 - 9000 * s.sat) / sr); } } } /* (v9.5) a drum's Snap and Drive knobs add to the channel's character */
-  kick(off) { this.scPend = off; }
+  kick(off, amt) { amt = amt == null ? 1 : amt; if (this.scPend >= 0 && this.scPendAmt >= amt) return; this.scPend = off; this.scPendAmt = amt; } // (v10) amt: a ghost pump (no kick) breathes shallower; a kick in the same block wins
   // arrangement dynamics: the section's level relative to the drop (dB). Into a drop it lands in ~4 ms (with the impact);
   // everything else glides (quieter over ~0.2 s, louder over ~0.4 s) so a section change is a move, not a jump.
   // per-genre tone (mastering EQ, measured by tools/tone_cal.cjs): sub shelf 70 Hz, low-mid box 300 Hz, presence 3.5 kHz, air
@@ -241,7 +241,7 @@ class DeckMix {
     // doubles in the same order as before (channel by channel), so the result is the same; a silent channel costs one comparison
     // per sample. Before, every sample walked all 11 channels re-reading a dozen fields of each: the mixer was a third of the engine.
     const PU = this.pumpA, AdL = this.adL, AdR = this.adR, AbL = this.abL, AbR = this.abR, AmL = this.amL, AmR = this.amR, AhL = this.hbL, AhR = this.hbR, ArL = this.arL, ArR = this.arR, AsL = this.asL, AsR = this.asR, thr0 = Math.min(n, this.throwT);
-    { let scT = this.scT, scPend = this.scPend; for (let i = 0; i < n; i++) { if (scPend === i) { scT = 0; scPend = -1; } const t = scT++; let pump = 0; if (t < scA) pump = t / scA; else if (t < scA + scR) { const u = 1 - (t - scA) / scR; pump = u * u; } PU[i] = pump; } this.scT = scT; this.scPend = scPend; } // the sidechain pump of this block
+    { let scT = this.scT, scPend = this.scPend, scAmt = this.scAmt == null ? 1 : this.scAmt; for (let i = 0; i < n; i++) { if (scPend === i) { scT = 0; scPend = -1; scAmt = this.scPendAmt == null ? 1 : this.scPendAmt; } const t = scT++; let pump = 0; if (t < scA) pump = t / scA; else if (t < scA + scR) { const u = 1 - (t - scA) / scR; pump = u * u; } PU[i] = pump * scAmt; } this.scT = scT; this.scPend = scPend; this.scAmt = scAmt; } // the sidechain pump of this block
     AdL.fill(0, 0, n); AdR.fill(0, 0, n); AbL.fill(0, 0, n); AbR.fill(0, 0, n); AmL.fill(0, 0, n); AmR.fill(0, 0, n); AhL.fill(0, 0, n); AhR.fill(0, 0, n); ArL.fill(0, 0, n); ArR.fill(0, 0, n); AsL.fill(0, 0, n); AsR.fill(0, 0, n);
     let hAny = false; const capA = this.cap, PK = this.peak;
     for (let c = 0; c < NCH; c++) { const s = S[c], bL = this.bufL[c], bR = this.bufR[c], g0 = s.gp, gd = (s.gs - s.gp) / n, dk = c === 4 && this.bassDuck > 0 ? this.bassDuck : depth * CH_DUCK[c], rv = s.rev || s.revAdd ? (s.rev + s.revAdd) * rb : 0, dy = s.dly, ec = snd ? s.ech : 0, rs = snd ? s.rsn : 0, sh = snd ? s.shm : 0, cp = capA ? capA[c] : null;

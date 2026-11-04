@@ -105,7 +105,7 @@ class Deck {
     if (score.mix) { this.mix.setSends(score.mix); this.sendCfg = Object.assign({}, score.mix); } this.setDrums(k, score.meta && score.meta.gid, false); this.applyAuto(); }
   allOff() { for (const s of this.synths) s.releaseAll(); this.fx.stopAll(); this.tex.set(this.tex.kind, 0, this.sr * 0.2); }
   // automation state follows a jump: the last automation target before the new position, as if its ramp had finished
-  autoAt(step) { this.autoCur.set(AUTO_DEFAULT); this.autoTgt.set(AUTO_DEFAULT); this.autoRate.fill(0); const E = this.ev; if (!E) { this.applyAuto(); return; } for (let i = 0; i < this.N && E.t[i] < step; i++) if (E.ch[i] === 11) { const k = autoIndex(E.a[i], E.f[i]); this.autoCur[k] = this.autoTgt[k] = E.v[i]; }
+  autoAt(step) { this.autoCur.set(AUTO_DEFAULT); this.autoTgt.set(AUTO_DEFAULT); this.autoRate.fill(0); const E = this.ev; if (!E) { this.applyAuto(); return; } for (let i = 0; i < this.N && E.t[i] < step; i++) if (E.ch[i] === 11 && E.a[i] >= 0) { const k = autoIndex(E.a[i], E.f[i]); this.autoCur[k] = this.autoTgt[k] = E.v[i]; }
     this.autoCur[20 + 13] = this.autoTgt[20 + 13] = 0; this.autoCur[20 + 14] = this.autoTgt[20 + 14] = 1; this.applyAuto(); this.texAt(step); } // a jump never lands inside a repeat or a tape stop
   // texture state at a position (after a jump the bed has the level and the chord of where the music is, not of where it was)
   texAt(step) { const E = this.ev; if (!E) return; let lv = -1, ck = -1; for (let i = 0; i < this.N && E.t[i] < step; i++) if (E.ch[i] === 10) { if (E.d[i] < 0) ck = i; else lv = i; }
@@ -147,7 +147,7 @@ class Deck {
       case 2: this.hitHat(off, v, a | 0, E.y[i]); break;
       case 3: this.hitPerc(off, v, PERC_NAMES[(f >> 2) & 31] || 'conga', a, E.y[i]); break;
       case 9: this.fx.trigger(off, a | 0, v, E.d[i] * this.sps, E.x[i], E.y[i], E.f[i]); break; // x = the note an ear-candy FX lands on, y = its pan (0 = the engine picks)
-      case 11: { const k = autoIndex(a, f), d = E.d[i]; this.autoTgt[k] = v; this.autoRate[k] = d > 0.01 && !AUTO_STEP.has(k) ? Math.abs(v - this.autoCur[k]) / d : 1e9; break; } // automation: see autoIndex — a target and a ramp over d steps
+      case 11: { if (a < 0) { if (a === -2) this.mix.kick(off, v); break; } /* (v10) -2: a ghost pump — the sidechain breathes on the beat with no kick (v = depth) */ const k = autoIndex(a, f), d = E.d[i]; this.autoTgt[k] = v; this.autoRate[k] = d > 0.01 && !AUTO_STEP.has(k) ? Math.abs(v - this.autoCur[k]) / d : 1e9; break; } // automation: see autoIndex — a target and a ramp over d steps
       case 10: if (E.d[i] < 0) { this.tex.setChord(f, E.x[i]); this.mix.reso.setChord(f, E.x[i]); this.fx.mask = f; this.fx.root = E.x[i]; } else this.tex.set(a | 0, v, E.d[i] * this.sps); break; // texture level ramp, or (d < 0) the chord: the texture and the resonator tune to it
       default: { const syn = ch === 4 ? this.bass : ch === 5 ? this.chords : ch === 6 ? this.pad : ch === 7 ? this.lead : this.arp;
         o.slide = !!(f & 1); o.accent = !!(f & 2); o.bright = E.x[i] || 1; o.lfo = ch === 4 ? E.y[i] : 0; o.vowel = ch === 7 && E.y[i] > 0 ? VOWEL_LIST[(E.y[i] - 1) | 0] : 'a'; o.pan = (ch === 5 || ch === 6 || ch === 8) && a >= 52 ? SPREAD[(a | 0) % 12] : 0; o.fit = (ch === 5 || ch === 6) && E.d[i] >= 8;
