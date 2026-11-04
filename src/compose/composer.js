@@ -983,6 +983,7 @@ function planNext(gid, ctx) { ctx = ctx || {}; const G = GENRE_BY_ID[gid], rnd =
     if (homeFam && c.id !== gid) { const hf = JOURNEY_NEXT[homeFam] || [homeFam]; w *= c.family === homeFam ? 2.6 : hf.includes(c.family) ? 1 : 0.25; } // the set's home style pulls: a psy set stays psy-led, with excursions
     const e = SET_ENERGY[c.id] ?? 0.6; w *= Math.exp(-Math.abs(e - target) / 0.12);
     const homeBpm = ctx.homeBpm || bpm; if (c.family !== homeFam || c.id === gid || Math.abs(mid(c) - homeBpm) > homeBpm * 0.12) { const to = tempoOff(c); if (j === 'flow' && c.id !== gid && Math.abs(mid(c) - mid(G)) > mid(G) * 0.09) w *= 0.15; w *= Math.exp(-to / 0.03); } // (the way home is never too far in tempo: the glide after the mix brings the set back)
+    if (ctx.pref && ctx.pref[c.id]) w *= Math.exp(0.35 * Math.max(-3, Math.min(4, ctx.pref[c.id]))); // (v9.5) the genres you keep pull, the ones you skip push away
     cands.push([c.id, w, e]); }
   // a genre plays two to four tracks, then the set moves on: staying has a set chance by the length of the run (72 %, then 62 %, 40 %,
   // 15 %), whatever the number of neighbours (as a weight among them it came out at 20–30 %: a new genre every 1.4 tracks, measured)

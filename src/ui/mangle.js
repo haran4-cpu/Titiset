@@ -23,7 +23,7 @@ const MG_RECIPES = [
   ['Talkbox', { mode: 'vowel', sub: 2, macro: 0.3, a: 0.6, b: 0.6, c: 0.5 }, 7], ['Yoy bass', { mode: 'vowel', sub: 3, macro: 0.5, a: 0.8, b: 0.7, c: 0.6 }, 4],
   ['Key crush', { mode: 'fold', sub: 2, macro: 0.5, a: 0.4, b: 0.7, c: 0.6 }], ['Melt', { mode: 'fold', sub: 1, macro: 0.75, a: 0.8, b: 0.4, c: 0.45 }]];
 const mgSlotDef = (mode) => ({ on: false, mode, sub: 1, macro: 0.5, a: 0.5, b: 0.5, c: 0.5, hold: 1 });
-function mgOf(i) { const D = decks[i]; if (!D.mg) D.mg = { sel: 0, target: -1, morph: 0.5, wet: 1, s: [mgSlotDef('slice'), mgSlotDef('spectral')] }; return D.mg; }
+function mgOf(i) { const D = decks[i]; if (!D.mg) { D.mg = { sel: 0, target: -1, morph: 0.5, wet: 1, s: [mgSlotDef('slice'), mgSlotDef('spectral')] }; const fav = tasteFav('mangle:'), R = fav && MG_RECIPES.find((x) => x[0] === fav); if (R) Object.assign(D.mg.s[0], R[1], { on: false }); } return D.mg; } // (v9.5) slot A starts on the recipe you use most
 function mgSendSlot(i, q) { const G = mgOf(i), S = G.s[q]; send({ type: 'mangle', deck: i, slot: q, on: S.on, mode: MG_MODES.indexOf(S.mode), sub: S.sub, macro: S.macro, a: S.a, b: S.b, c: S.c, hold: S.hold }); }
 function mgSendAll(i) { const G = mgOf(i); send({ type: 'mangle', deck: i, target: G.target, morph: G.morph, wet: G.wet }); mgSendSlot(i, 0); mgSendSlot(i, 1); }
 // a state written by a person, an AI or an older file: every field checked, anything else left out
@@ -59,7 +59,7 @@ function buildMangle(el) {
   $$('[data-mgk]', el).forEach((r) => r.oninput = () => { const c = cur(); c.S[r.dataset.mgk] = +r.value; if (c.S.on) mgSendSlot(c.i, c.q); });
   $('.mg-hold', el).onclick = () => live((c) => { c.S.hold = c.S.hold ? 0 : 1; });
   $$('[data-mgx]', el).forEach((r) => r.oninput = () => { const { i, G } = cur(); G[r.dataset.mgx] = +r.value; send({ type: 'mangle', deck: i, [r.dataset.mgx]: G[r.dataset.mgx] }); });
-  $$('[data-mgr]', el).forEach((b) => b.onclick = async () => { const [name, p, tgt] = MG_RECIPES[+b.dataset.mgr], c = cur(); Object.assign(c.S, p, { on: true }); await startAudio();
+  $$('[data-mgr]', el).forEach((b) => b.onclick = async () => { const [name, p, tgt] = MG_RECIPES[+b.dataset.mgr], c = cur(); Object.assign(c.S, p, { on: true }); tasteFx('mangle:' + name); await startAudio();
     if (tgt != null && c.G.target === -1) { c.G.target = tgt; send({ type: 'mangle', deck: c.i, target: tgt }); toast(`${name} — on the ${MG_TARGETS.find((x) => x[0] === tgt)[1].toLowerCase()} (change it under On)`); } mgSendSlot(c.i, c.q); renderMangle(); });
   $('[data-mgdice]', el).onclick = () => live((c) => { const r = Math.random; c.S.sub = Math.floor(r() * 4); c.S.macro = 0.3 + 0.6 * r(); c.S.a = r(); c.S.b = 0.2 + 0.7 * r(); c.S.c = r() * 0.8; });
   $('[data-mgkeep]', el).onclick = () => { const i = SHELL.fxDeck, D = decks[i]; if (!D.spec) { toast(`Deck ${'AB'[i]} is empty`); return; } D.spec.fx = { mangle: mgSnapshot(i) }; if (D.score && D.score.spec) D.score.spec.fx = D.spec.fx; toast('Mangle kept in the track — saved with it, back when it is loaded'); renderMangle(); };

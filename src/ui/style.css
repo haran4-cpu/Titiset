@@ -620,3 +620,13 @@ body.shell { height: 100vh; height: 100dvh; overflow: hidden; padding-bottom: 0 
 .ml-lhead { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; } .ml-name { flex: 1 1 180px; min-width: 0; }
 .ml-queue { margin: 0; font-size: 13px; padding: 6px 10px; border-left: 3px solid var(--a); }
 .btn.warn { border-color: #d65d7a; color: #f0a0b2; }
+/* (v9.5) Your sound */
+.taste { display: grid; gap: 8px; }
+.ts-row { display: grid; grid-template-columns: 128px minmax(0, 1fr); gap: 8px; align-items: center; }
+.ts-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ts-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; border: 1px solid var(--line2); border-radius: 14px; font: 500 12px var(--f-data); color: var(--text); background: var(--well); }
+.ts-chip.on { border-color: var(--a); }
+.ts-chip button { min-width: 0 !important; min-height: 0 !important; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--dim); font-size: 11px; cursor: pointer; }
+.ts-chip button:hover, .ts-chip button:focus-visible { background: var(--line2); color: var(--text); }
+.taste input[type=checkbox] { width: 16px; height: 16px; }
+@media (max-width: 560px) { .ts-row { grid-template-columns: 1fr; } }

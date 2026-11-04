@@ -44,7 +44,7 @@ function deckSpec(score) { // the editable spec of a score: complete (every patt
   if (o) { if (o.form) o.form.forEach((f, k) => { if (f && f.melody && sp.form[k]) sp.form[k].melody = f.melody; }); if (o.notes) sp.notes = o.notes; if (o.title) sp.title = o.title; if (o.mood) sp.mood = o.mood; if (o.fx) sp.fx = o.fx; } // mood stays as the label of what was asked for (the written harmony it chose still plays)
   return sp; }
 function installScore(i, s, opt) { // a freshly composed / compiled score becomes the deck's track (loaded, not swapped)
-  opt = opt || {}; const D = decks[i], other = decks[i ^ 1], otherLive = other.playing && other.score;
+  opt = opt || {}; const D = decks[i], other = decks[i ^ 1], otherLive = other.playing && other.score; tasteOnReplace(D);
   D.score = s; D.gid = s.meta.gid; D.native = s.meta.bpm; D.groove = null; D.partMix = null; D.loop = 0; /* (v9.3: a new track starts with the engine's groove and part levels: as written) */ D.pendJump = -1; D.pos = 0; D.ended = false; D.fresh = true; D.libId = null; D.spec = deckSpec(s); D.val = null; D.lint = lintScore(s);
   const { msg, transfer } = packScore(s); const bpm = otherLive ? other.bpm : 0, play = !!opt.play && !otherLive;
   send({ type: 'load', deck: i, score: msg, cal: cal(s.meta.gid), play, bpm: bpm || undefined, from: 0 }, transfer);
@@ -74,7 +74,7 @@ function undo(dir) { const i = DOCK.deck, D = decks[i]; const from = dir > 0 ? D
   toast(dir > 0 ? 'Redo' : 'Undo'); renderDock(); }
 function edit(fn, q, now) { const i = DOCK.deck, D = decks[i]; if (!D.spec) { toast('Load a track into this deck first'); return; } snap(D); fn(D.spec, D); DOCK.scoreDirty = false; if (now) commitSpec(i, { q }); else commitSoon(i, q); renderDock(); }
 let kitGesture = 0; addEventListener('pointerup', () => { kitGesture = 0; });
-function liveKit(slot, k, v) { const i = DOCK.deck, D = decks[i]; if (!D.spec) return; if (!kitGesture) { snap(D); kitGesture = 1; } send({ type: 'kit', deck: i, slot, p: { [k]: v } });
+function liveKit(slot, k, v) { const i = DOCK.deck, D = decks[i]; if (!D.spec) return; tasteKnob(slot, k, v); if (!kitGesture) { snap(D); kitGesture = 1; } send({ type: 'kit', deck: i, slot, p: { [k]: v } });
   const S = D.spec.sound || (D.spec.sound = {}); (S[slot] || (S[slot] = {}))[k] = typeof v === 'number' ? +v.toPrecision(4) : v; DOCK.scoreDirty = false; }
 
 // ---------------------------------------------------------------- context: which section / bar the editor points at
@@ -114,7 +114,7 @@ const synParams = (keys) => keys.map((k) => P_SYN.find((p) => p[0] === k));
 function presetSelect(slot) { const bank = SOUND_BANK[slot]; if (!bank) return ''; const D = decks[DOCK.deck], cur = D.spec && D.spec.sound && D.spec.sound[slot] && D.spec.sound[slot].preset || '';
   return `<label class="dk-field"><span class="lbl">Preset</span><select class="btn dk-preset" data-slot="${slot}" title="${esc(cur && bank[cur] ? bank[cur].d : 'The genre\'s own sound')}"><option value="">Genre sound</option>${Object.entries(bank).map(([k, p]) => `<option value="${k}"${k === cur ? ' selected' : ''} title="${esc(p.d)}">${esc(p.label)}</option>`).join('')}</select></label>`; }
 // a preset replaces the slot's sound in the score (level-matched to the genre's kit by the compiler) and is heard at once
-function wirePreset(body) { $$('.dk-preset', body).forEach((sel) => sel.onchange = () => { const slot = sel.dataset.slot, val = sel.value;
+function wirePreset(body) { $$('.dk-preset', body).forEach((sel) => sel.onchange = () => { const slot = sel.dataset.slot, val = sel.value; tastePreset(slot, val);
   edit((s) => { if (!val) { if (s.sound) delete s.sound[slot]; } else (s.sound || (s.sound = {}))[slot] = { preset: val }; if (s.sound && !Object.keys(s.sound).length) delete s.sound; }, 1, true);
   const sc = decks[DOCK.deck].score, k = slot === 'arp' ? sc.kits.hook || sc.kits.arp : sc.kits[slot]; if (k) send({ type: 'kit', deck: DOCK.deck, slot, p: k });
   toast(val ? `${slot}: ${SOUND_BANK[slot][val].label} — ${SOUND_BANK[slot][val].d}` : `${slot}: back to the genre sound`); }); }
@@ -427,7 +427,7 @@ function presetGrid(slot, gid) { const bank = SOUND_BANK[slot]; if (!bank) retur
   return `${chips}<div class="dk-pgrid" data-slot="${slot}"><button class="dk-pcard${cur ? '' : ' on'}" data-pset="" data-tags="all"><b>Genre sound</b><small>the genre's own ${slot}</small></button>${pal.map(card).join('')}${rest.map(card).join('')}</div>`; }
 function filterPresetGrid(body, slot) { const f = (DOCK.tagF || {})[slot] || ''; $$('.dk-pgrid [data-pset]', body).forEach((c) => { c.hidden = !!f && c.dataset.pset !== '' && !(c.dataset.tags || '').split(' ').includes(f); });
   $$('[data-tagf]', body).forEach((b) => { b.classList.toggle('on', b.dataset.tagf === f); b.onclick = () => { (DOCK.tagF || (DOCK.tagF = {}))[slot] = b.dataset.tagf; filterPresetGrid(body, slot); }; }); }
-function wirePresetGrid(body, slot, grid) { $$('[data-pset]', grid || body).forEach((b) => b.onclick = () => { const val = b.dataset.pset; edit((s) => { if (!val) { if (s.sound) delete s.sound[slot]; } else (s.sound || (s.sound = {}))[slot] = { preset: val }; if (s.sound && !Object.keys(s.sound).length) delete s.sound; }, 1, true);
+function wirePresetGrid(body, slot, grid) { $$('[data-pset]', grid || body).forEach((b) => b.onclick = () => { const val = b.dataset.pset; tastePreset(slot, val); edit((s) => { if (!val) { if (s.sound) delete s.sound[slot]; } else (s.sound || (s.sound = {}))[slot] = { preset: val }; if (s.sound && !Object.keys(s.sound).length) delete s.sound; }, 1, true);
     toast(val ? `${slot}: ${SOUND_BANK[slot][val].label} from the next bar — ${SOUND_BANK[slot][val].d}` : `${slot}: back to the genre sound`); }); }
 function renderSound(body, f, only) {
   const slots = slotsOf(f.s).filter((x) => !only || only.includes(x)); if (!slots.length) { body.innerHTML = '<div class="dk-empty">This genre has no sound for this part.</div>'; return; } if (!slots.includes(DOCK.slot)) DOCK.slot = slots.includes('chords') ? 'chords' : slots[0]; const slot = DOCK.slot, drum = !!P_DRUM[slot];

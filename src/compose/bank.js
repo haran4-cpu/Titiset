@@ -293,14 +293,14 @@ function paletteFor(gid) { const G = GENRE_BY_ID[gid]; if (!G) return {}; const 
   return out; }
 // a new track's sounds (v9.4): most parts take a palette sound (lead, chords, pad, arp 80 %, bass 60 %), the track leans towards one
 // character, two parts avoid one engine and two bright voices in one register, and each pick is varied for this track (varyKit)
-function paletteSounds(gid, seed) { const pal = paletteFor(gid), r = rng((((seed >>> 0) * 2654435761) >>> 0) ^ hashStr('palette/' + gid)), out = {}, models = [], picked = {};
+function paletteSounds(gid, seed, pref) { /* (v9.5) pref: the user's sound (ui/taste.js) — weights on tags and on sounds; null: as before */ const pal = paletteFor(gid), r = rng((((seed >>> 0) * 2654435761) >>> 0) ^ hashStr('palette/' + gid)), out = {}, models = [], picked = {};
   const ch = r() < 0.75 ? CHARACTERS[Math.floor(r() * CHARACTERS.length) % CHARACTERS.length][1].split(' ') : [];
   for (const slot of ['bass', 'chords', 'pad', 'lead', 'arp']) { const x = r(), list = pal[slot]; if (!list || x >= (slot === 'bass' ? 0.6 : 0.8)) continue;
     const w = list.map((n) => { const e = SOUND_BANK[slot][n], t = e.tags || [], md = e.k && e.k.model; let q = 1;
       if (ch.length && t.some((z) => ch.includes(z))) q *= 2.5; if (md && models.includes(md)) q *= 0.3; // one engine per track where there is a choice
       if (slot === 'arp' && picked.lead && t.includes('bright') && tagsOf('lead', picked.lead).includes('bright')) q *= 0.4; // two bright voices in the same register mask each other
       if (slot === 'pad' && picked.chords && t.includes('huge') && tagsOf('chords', picked.chords).includes('huge')) q *= 0.4;
-      if (e.v94) q *= 1.3; return q; }); // (the new engines are under-represented in the older palettes)
+      if (e.v94) q *= 1.3; if (pref) { let tw = 0; for (const z of t) tw += pref.tags && pref.tags[z] || 0; q *= Math.max(0.25, Math.exp(0.35 * clamp(tw, -4, 6))); const nw = pref.names && pref.names[slot + '/' + n]; if (nw) q *= Math.max(0.2, Math.exp(0.45 * clamp(nw, -3, 5))); } return q; }); // (the new engines are under-represented in the older palettes)
     let sum = 0; for (const q of w) sum += q; let y = r() * sum, k = 0; while (k < list.length - 1 && (y -= w[k]) > 0) k++;
     const n = list[k]; picked[slot] = n; const md = SOUND_BANK[slot][n].k && SOUND_BANK[slot][n].k.model; if (md) models.push(md); out[slot] = { preset: n, vary: (r() * 1e9) >>> 0 }; }
   const fam = kitFor(gid, r); if (fam) out.drums = { family: fam };

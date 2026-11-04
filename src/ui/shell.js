@@ -15,12 +15,12 @@ const FX_TARGETS = [[-1, 'Whole deck'], [0, 'Kick'], [1, 'Snare'], [2, 'Hats'], 
 const BFX_PARAMS = { delay: [['fb', 'Feedback', 0, 0.95], ['tone', 'Tone', -1, 1], ['wob', 'Wobble', 0, 1], ['pp', 'Ping-pong', 'toggle']], reverb: [['size', 'Size', 0, 1], ['damp', 'Damping', 0, 1], ['pre', 'Pre-delay', 0, 0.1], ['freeze', 'Freeze', 'toggle']],
   filter: [['type', 'Type', ['LP', 'HP', 'BP']], ['res', 'Resonance', 0, 1]] };
 const BFX_PDEF = { fb: 0.55, tone: 0, wob: 0, pp: 1, size: 0.6, damp: 0.4, pre: 0.02, freeze: 0, type: 0, res: 0.6 };
-function bfxOf(i) { const D = decks[i]; if (!D.bfx) { D.bfx = { sel: 'delay', target: -1, q: true, latch: true, fx: {} }; for (const [id] of BEAT_FX) D.bfx.fx[id] = { on: false, amt: id === 'reverb' ? 0.45 : 0.6, beat: BEAT_DEF[id] ?? 3, p: Object.assign({}, BFX_PDEF) }; } return D.bfx; }
+function bfxOf(i) { const D = decks[i]; if (!D.bfx) { D.bfx = { sel: (tasteFav('beat:') && BEAT_FX_BY[tasteFav('beat:')]) ? tasteFav('beat:') : 'delay', target: -1, q: true, latch: true, fx: {} }; for (const [id] of BEAT_FX) D.bfx.fx[id] = { on: false, amt: id === 'reverb' ? 0.45 : 0.6, beat: BEAT_DEF[id] ?? 3, p: Object.assign({}, BFX_PDEF) }; } return D.bfx; }
 // one message to the engine for one effect of one deck
 function bfxSend(i, id, extra) { const B = bfxOf(i), F = B.fx[id], E = BEAT_FX_BY[id]; const m = { type: 'fx', deck: i, name: E[2], on: F.on, amt: F.amt };
   if (E[2] !== 'repeat' && E[2] !== 'tape') { if (E[3]) m.beat = F.beat; m.p = F.p; m.q = !!(B.q && extra !== 'now'); if (B.target >= 0) m.ch = B.target; }
   send(m); }
-function bfxToggle(i, id, on) { const B = bfxOf(i), F = B.fx[id]; F.on = on == null ? !F.on : !!on; bfxSend(i, id); renderBeatFx(); }
+function bfxToggle(i, id, on) { const B = bfxOf(i), F = B.fx[id]; F.on = on == null ? !F.on : !!on; if (F.on) tasteFx('beat:' + id); bfxSend(i, id); renderBeatFx(); }
 function bfxTarget(i, t) { const B = bfxOf(i); if (t === B.target) return; for (const [id] of BEAT_FX) if (B.fx[id].on) { B.fx[id].on = false; bfxSend(i, id, 'now'); } B.target = t; renderBeatFx(); }
 // ---- the shell ----
 function buildShell() { const app = $('.app'), con = $('.console'); if (!app || !con || $('.screens')) return;
@@ -32,7 +32,7 @@ function buildShell() { const app = $('.app'), con = $('.console'); if (!app || 
   for (const d of $$('.deck', con)) into('play').appendChild(d);
   const tr = document.createElement('div'); tr.className = 'transport'; tr.setAttribute('role', 'group'); tr.setAttribute('aria-label', 'Transport');
   tr.innerHTML = `<label class="tp-kind"><span class="lbl">Next mix</span></label><button class="tp" data-tp="play0">▶ A</button><button class="tp mix" data-tp="mix"><span>Mix →</span><small class="tp-style">Auto</small></button><button class="tp" data-tp="play1">▶ B</button><div class="tp-ext" role="group" aria-label="Keep the playing track going"><button class="tp" data-ext="extend">+ Extend</button><button class="tp" data-ext="ride">Ride</button><button class="tp" data-ext="endless" aria-pressed="false">∞ Endless</button></div>`; into('play').appendChild(tr); wireExtend($('.tp-ext', tr));
-  { const k = $('#txKind'), lb = $('label[for="txKind"]'); if (k) { $('.tp-kind', tr).appendChild(k); k.setAttribute('aria-label', 'Transition for the next mix'); } if (lb) lb.remove(); } // the transition is chosen where the mix is started
+  { const k = $('#txKind'), lb = $('label[for="txKind"]'); if (k) k.addEventListener('change', () => tasteMix(k.value)); if (k) { $('.tp-kind', tr).appendChild(k); k.setAttribute('aria-label', 'Transition for the next mix'); } if (lb) lb.remove(); } // the transition is chosen where the mix is started
   $('[data-tp=play0]', tr).onclick = () => playPause(0); $('[data-tp=play1]', tr).onclick = () => playPause(1);
   $('[data-tp=mix]', tr).onclick = async () => { await startAudio(); const b = lead ^ 1, D = decks[b]; if (tx) { toast('A mix is already running — Cancel it on MIX'); return; } if (!D.score) { toast(`Deck ${'AB'[b]} is empty — pick a genre for it first`); return; } if (!decks[lead].playing) { playPause(b); return; } mixInto(b); };
   // MIX: the mixer
@@ -50,7 +50,7 @@ function buildShell() { const app = $('.app'), con = $('.console'); if (!app || 
   { const lp = document.createElement('div'); lp.className = 'lenpick'; lp.innerHTML = `<span class="lbl">New tracks</span><div class="seg" role="group" aria-label="Length of new tracks">${TRACK_LENS.map(([k, l, d]) => `<button data-len="${k}" title="${d}">${l}</button>`).join('')}</div>`; set.appendChild(lp); // (v9.4) Radio · Club · Extended
     const paint = () => $$('[data-len]', lp).forEach((b) => { const on = b.dataset.len === TRACK_LEN.v; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
     $$('[data-len]', lp).forEach((b) => b.onclick = () => { TRACK_LEN.v = b.dataset.len; try { localStorage.setItem('forge.len', TRACK_LEN.v); } catch (e) { /* per-viewer convenience only */ } paint(); toast(`New tracks: ${b.textContent} — ${b.title}`); }); paint(); }
-  if (lib) set.appendChild(lib); buildMyLib(); /* (v9.5) My library, above the genre library */
+  if (lib) set.appendChild(lib); buildMyLib(); buildTaste(); /* (v9.5) My library above the genre library, Your sound under it */
   if (top) { const tools = document.createElement('div'); tools.className = 'set-tools'; for (const b of $$('button.power', top)) tools.appendChild(b); set.appendChild(tools); const tele = $('.tele', top); if (tele) set.appendChild(tele); }
   // the status bar (not interactive) and the tab bar
   if (top) { const st = document.createElement('div'); st.className = 'status'; st.innerHTML = `<b>FORGE</b><span class="st-bpm">—</span><span class="st-lufs">—</span><span class="st-mix"></span>`; top.appendChild(st); }
