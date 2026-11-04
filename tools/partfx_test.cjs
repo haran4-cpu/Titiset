@@ -10,7 +10,7 @@ const { load } = require('./load.cjs'); const X = load();
 let fails = 0; const ok = (c, m) => { console.log((c ? '✓ ' : '✗ ') + m); if (!c) fails++; };
 const SR = 44100, score = X.composeTrack('deep-house', 3), from = (X.peakSectionOf(score).bar0 || 0) * 16;
 // renders the deck while recording each channel's buffer after the part effects (the mix's per-channel buffers, read after every block)
-function render(cmds, secs, at) { const E = new X.Engine(SR); E.cmd({ type: 'load', deck: 0, score, cal: null, play: true, from }); const M = E.decks[0].mix; const N = Math.round(SR * secs), B = 128;
+function render(cmds, secs, at) { const E = new X.Engine(SR); E.cmd({ type: 'load', deck: 0, score, cal: null, play: true, from }); E.cmd({ type: 'carve', deck: 0, v: 0 }); /* (the mix carve off: it would dip the chords under the bass and lead whose sound the effects change — this test is about routing) */ const M = E.decks[0].mix; const N = Math.round(SR * secs), B = 128;
   const L = new Float32Array(N), R = new Float32Array(N), CL = new Float32Array(B), CR = new Float32Array(B), ch = {}; for (const c of [4, 5, 7]) ch[c] = new Float32Array(N); let bad = 0, pk = 0;
   for (let i = 0, k = 0; i < N; i += B, k++) { for (const [t, c] of at || []) if (t === k) E.cmd(c); if (k === 0) for (const c of cmds) E.cmd(c);
     const l = new Float32Array(B), r = new Float32Array(B); E.render(l, r, B, CL, CR); for (let j = 0; j < B && i + j < N; j++) { L[i + j] = l[j]; R[i + j] = r[j]; if (!Number.isFinite(l[j]) || !Number.isFinite(r[j])) bad++; pk = Math.max(pk, Math.abs(l[j]), Math.abs(r[j])); }
