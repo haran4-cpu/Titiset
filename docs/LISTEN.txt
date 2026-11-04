@@ -1,3 +1,16 @@
+DJ TiTo 10 — listening guide (tools/listen_v10.cjs <outdir>)
+==========================================================
+
+Rendered by DJ TiTo's own engine and MP3 encoder (192 kb/s), with the palette and levels a new track gets. LEVELS.txt lists
+length, loudness and true peak.
+
+1. SPACE (space-<genre>-before / -after): the same 8 bars of a drop with the mix carve off (9.5) and on (10), six genres.
+   Listen for the lead and the bass coming forward out of the chords. The "after" clips are 0.3–0.5 LU quieter (the carve
+   takes energy out where parts collided): compare clarity, not volume.
+2. BREAKDOWNS THAT BREATHE (breathe-*): no kick, the pads pump on the beat — trance, progressive house, melodic techno.
+3. THE BASS STEPS OUT (predrop-*): the last 2 bars of a build and 2 of the drop; the bass is out for the build's last two beats.
+4. TWO PARTS, TWO EFFECTS (parts-fx): a deep house drop, a delay on the bass from bar 3, a reverb on the chords from bar 5.
+
 FORGE 9.5 — listening guide (the preview pack: tools/listen_v95a.cjs <outdir>)
 =========================================================================
 

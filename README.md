@@ -1,9 +1,17 @@
-# FORGE — generative two-deck engine
+# DJ TiTo — generative two-deck engine (formerly FORGE)
 
 A browser instrument for DJs, creators and listeners. Every track is composed from a **genre contract** (tempo window,
 swing, drum grammar, bass grammar, harmony, arrangement form, sound kits, mix targets) and played by an AudioWorklet
 engine that times every event to the sample. Two decks, phrase-aligned key-compatible mixing with a bass swap,
 quantised jumps and loops, live re-composition (key / mode / progression / tempo / variation) on the next bar line.
+
+## 10 in one paragraph
+FORGE is now DJ TiTo. Effects work on every part at once (each part keeps its own Beat FX and Mangle); the mix carves room for
+each part — chords and pad give way to the lead and arp, low-mids give way to the bass, the bass's sub to the kick (the Space
+knob; masked energy between parts 17.8 → 11.5 % over 24 drops); FM and grain synths no longer alias on high notes and every
+voice's sub is mono; breakdowns breathe and the bass steps out before the drop; DJ TiTo learns your deck sound and part levels,
+with ♥ More / Less on each deck; SET opens with Rec, then your library, then the styles. Details: docs/CHANGES-v10.md.
+`dist/DJ-TiTo.html` is the app (`dist/FORGE.html` is the same file, for old links).
 
 ## 9.5 in one paragraph
 A library and a memory: save tracks with every edit, Mangle and hot cue, build playlists that show how each pair meets, and
