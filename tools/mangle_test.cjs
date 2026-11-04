@@ -1,7 +1,8 @@
 // (v9.5) MANGLE (src/engine/06d_mangle.js): every engine and every one of its four choices, run as an insert on a real deck
 // (10 bars of the peak section of a psytrance and a deep-house track, rendered dry first), switched on off the grid and off again:
 //   · finite, audible (it changes the sound: the difference ≥ −20 dB under the dry signal), its level within −6 … +3 dB of the dry
-//     signal's and its peak at most 6 dB over the dry peak, no more clicks than the dry bars have (+2) — switching it on and off included;
+//     signal's and its peak at most 6 dB over the dry peak, no more clicks than the dry bars have (+2) — switching it on and off included (SLICE and GRAIN: counted on smooth
+//     material, since they move the music's own transients);
 //   · its cost per second of audio (real time = 1000 ms), each under 80 ms;
 //   · it keeps time: SLICE at Chaos 0 is the bar before, sample for sample (Hold off), and its slices start on the grid;
 //   · it keeps the key: SPECTRAL · Key turns white noise into the chord (C E G carry ≥ 55 % of the pitched energy, noise: 25 %), and
@@ -21,13 +22,20 @@ function mangle(sig, bpm, beat0, ev, mask, root) { const M = new X.Mangler(sr); 
   const bInc = bpm / 60 / sr; let busy = 0n;
   for (let i = 0; i < n; i += BLK) { if (ev) ev(i, M); const m = Math.min(BLK, n - i); for (let k = 0; k < m; k++) { bl[k] = sig.L[i + k]; br[k] = sig.R ? sig.R[i + k] : sig.L[i + k]; } const a = process.hrtime.bigint(); M.block(bl, br, m, beat0 + i * bInc); busy += process.hrtime.bigint() - a; for (let k = 0; k < m; k++) { L[i + k] = bl[k]; R[i + k] = br[k]; } }
   return { L, R, ms: Number(busy) / 1e6, sec: n / sr }; }
+// SLICE and GRAIN re-place the music's own transients (a hat moved to a quiet moment is not an artifact, but the click detector
+// cannot tell): their clicks are counted on smooth material — a sustained chord with a slow swell, which has none of its own
+const SMOOTH = (() => { const n = sr * 9, L = new Float32Array(n), R = new Float32Array(n); for (let i = 0; i < n; i++) { const t = i / sr, a = 0.25 * (0.6 + 0.4 * Math.sin(2 * Math.PI * 0.3 * t)); L[i] = a * (Math.sin(2 * Math.PI * 220 * t) + 0.6 * Math.sin(2 * Math.PI * 277.2 * t) + 0.5 * Math.sin(2 * Math.PI * 329.6 * t)); R[i] = L[i] * 0.9; } return { L, R }; })(), smoothMemo = {};
+function smoothClicks(mode, sub, macro) { const k = mode + '/' + sub + '/' + macro; if (smoothMemo[k] != null) return smoothMemo[k]; const spb = sr * 60 / 128; X.noiseSeed(4242);
+  const r = mangle(SMOOTH, 128, 0, (i, M) => { if (i <= Math.round(1.37 * spb) && Math.round(1.37 * spb) < i + BLK) M.set({ slot: 0, on: true, mode, sub, macro, a: 0.5, b: 0.5, c: 0.5, hold: mode === 0 ? 1 : 0 }); if (i <= Math.round(14.6 * spb) && Math.round(14.6 * spb) < i + BLK) M.set({ slot: 0, on: false }); }, 0x91, 0);
+  return (smoothMemo[k] = clicks(r.L, sr)); }
 const bad = [], cost = [];
 for (const gid of ['psytrance', 'deep-house']) { const d = dryOf(gid), spb = sr * 60 / d.bpm, on = Math.round(4.37 * spb), off = Math.round(34.6 * spb), m0 = Math.round(8 * spb), m1 = Math.round(32 * spb), dk = clicks(d.L, sr);
   for (let mode = 0; mode < 8; mode++) for (let sub = 0; sub < 4; sub++) for (const macro of [0.5, 1]) { const name = `${gid} ${X.MG_MODES[mode]}/${X.MG_SPEC[X.MG_MODES[mode]][4][sub]} macro ${macro}`;
+    X.noiseSeed(0x6a11 + mode * 97 + sub * 13); /* (each run on its own noise: the result does not depend on the order) */
     const r = mangle(d, d.bpm, d.beat0, (i, M) => { if (i <= on && on < i + BLK) M.set({ slot: 0, on: true, mode, sub, macro, a: 0.5, b: 0.5, c: 0.5, hold: mode === 0 ? 1 : 0 }); if (i <= off && off < i + BLK) M.set({ slot: 0, on: false }); }, d.mask, d.root);
     let fin = true; for (const x of r.L) if (!Number.isFinite(x)) fin = false; for (const x of r.R) if (!Number.isFinite(x)) fin = false;
     const lv = 20 * Math.log10((rms(r.L, m0, m1) + rms(r.R, m0, m1)) / (rms(d.L, m0, m1) + rms(d.R, m0, m1))), pk = 20 * Math.log10(Math.max(peak(r.L), peak(r.R)) / Math.max(peak(d.L), peak(d.R)));
-    const diff = new Float32Array(m1 - m0); for (let i = 0; i < diff.length; i++) diff[i] = r.L[m0 + i] - d.L[m0 + i]; const ch = 20 * Math.log10(rms(diff) / (rms(d.L, m0, m1) + 1e-12)), ck = clicks(r.L, sr);
+    const diff = new Float32Array(m1 - m0); for (let i = 0; i < diff.length; i++) diff[i] = r.L[m0 + i] - d.L[m0 + i]; const ch = 20 * Math.log10(rms(diff) / (rms(d.L, m0, m1) + 1e-12)), ck = mode <= 1 ? smoothClicks(mode, sub, macro) : clicks(r.L, sr);
     const why = []; if (!fin) why.push('non-finite'); if (ch < -20) why.push(`inaudible (${ch.toFixed(1)} dB)`); if (lv < -6 || lv > 3) why.push(`level ${lv.toFixed(1)} dB`); if (pk > 6) why.push(`peak +${pk.toFixed(1)} dB`); if (ck > dk + 2) why.push(`${ck} clicks (dry ${dk})`);
     if (why.length) bad.push(`${name}: ${why.join(', ')}`); if (macro === 0.5 && gid === 'psytrance') cost.push([X.MG_MODES[mode] + '/' + sub, r.ms / r.sec]);
     if (V) console.log(`  ${name.padEnd(46)} level ${lv.toFixed(1).padStart(5)} dB · peak ${pk.toFixed(1).padStart(5)} · change ${ch.toFixed(1).padStart(6)} dB · clicks ${ck} (dry ${dk}) · ${(r.ms / r.sec).toFixed(1)} ms/s`); } }
