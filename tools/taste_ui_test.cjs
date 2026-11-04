@@ -10,6 +10,13 @@ const OUT = process.argv[2] || '.'; let fails = 0; const ok = (c, m) => { consol
   await F(() => window.__forge.loadDeck(1, 'melodic-techno', { play: false })); await page.waitForFunction(() => !window.__forge.decks[1].loading && window.__forge.decks[1].score, null, { timeout: 60000 });
   ok(await F(() => window.__forge.decks[1].spec.mood === 'emotional' && document.querySelector('.deck[data-d="1"] .cmood').value === 'emotional'), 'the next track (another genre, on deck B) is composed with it, and its deck shows it');
   const tag = await F(() => { const W = window.__forge, name = 'house-organ'; W.taste.tastePreset('chords', name); return W.taste.T.tags.organ > 0 && W.taste.T.names['chords/house-organ'] > 0; }); ok(tag, 'a sound picked teaches its name and its tags');
+  // (v10) the deck sound and part levels you keep setting carry into the next track; ♥ More teaches the track
+  const mixL = await F(async () => { const W = window.__forge, T = W.taste; for (let k = 0; k < 3; k++) { T.tasteMixKnob('verb', 0.05, 0.3); T.tastePartLevel('bass', 1.4); }
+    const g0 = W.decks[1].playing ? 0 : 1; await W.loadDeck(g0, 'techno', { play: false }); await new Promise((r) => { const t = setInterval(() => { if (!W.decks[g0].loading && W.decks[g0].score) { clearInterval(t); r(); } }, 100); });
+    const D = W.decks[g0], G = W.auto.GENRES.find((x) => x.id === 'techno'); return { adj: T.T.mixAdj.verb, part: T.T.parts.bass, verb: D.spec.mix && D.spec.mix.verb, def: G && G.mix.verb, bass: D.partMix && D.partMix.bass && D.partMix.bass.level }; });
+  ok(mixL.adj < -0.1 && mixL.part > 1 && mixL.verb != null && mixL.def != null && mixL.verb < mixL.def - 0.05 && mixL.bass > 1.1, `the deck sound and part levels you keep setting start the next track that way (reverb ${mixL.verb} against the genre's ${mixL.def}; bass level ${mixL.bass}) — ${JSON.stringify(mixL)}`);
+  const lk = await F(() => { const W = window.__forge, g = W.decks[0].gid, w0 = W.taste.T.genres[g] || 0; document.querySelector('.deck[data-d="0"] [data-act=like]').click(); return (W.taste.T.genres[g] || 0) - w0; });
+  ok(lk > 0.5, `♥ More like this teaches the track's genre (+${lk.toFixed(2)})`);
   await F(() => window.__forge.shell.go('set')); await page.waitForTimeout(500); const chips = await F(() => document.querySelectorAll('.taste .ts-chip').length); ok(chips >= 3, `SET · Your sound shows what was learned (${chips} items)`);
   await page.screenshot({ path: OUT + '/taste.png' });
   await page.reload(); await page.waitForTimeout(1500); ok(await F(() => window.__forge.taste.T.mood === 'emotional' && window.__forge.taste.T.tags.organ > 0), 'it survives a reload (this browser)');

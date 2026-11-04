@@ -50,6 +50,7 @@ function installScore(i, s, opt) { // a freshly composed / compiled score become
   D.score = s; D.gid = s.meta.gid; D.native = s.meta.bpm; D.groove = null; D.partMix = null; D.loop = 0; /* (v9.3: a new track starts with the engine's groove and part levels: as written) */ D.pendJump = -1; D.pos = 0; D.ended = false; D.fresh = true; D.libId = null; D.spec = deckSpec(s); D.val = null; D.lint = lintScore(s);
   const { msg, transfer } = packScore(s); const bpm = otherLive ? other.bpm : 0, play = !!opt.play && !otherLive;
   send({ type: 'load', deck: i, score: msg, cal: cal(s.meta.gid), play, bpm: bpm || undefined, from: 0 }, transfer);
+  if (!opt.asSaved && typeof tasteApplyParts === 'function' && tasteOn()) tasteApplyParts(i); // (v10) the part levels you keep setting (not on a library track or a set: those play as saved)
   D.bpm = bpm || s.meta.bpm; D.loading = null; // (v9.2) the tempo it will play at, at once (the box showed the last track's tempo until the analysis, 5–9 s later)
   D.mute.fill(false); D.trim = null; D.trimNA = false; renderDeckHead(i); renderStems(i); analyse(i, s); if (s.levelPending) refineInWorker(i, s); // palette levels: exact match from the worker
   if (play) toast(`${s.meta.name} — ${PCN[s.meta.key]} ${s.meta.mode}, ${s.meta.bpm} BPM`); else if (otherLive) toast(`${s.meta.name} cued on deck ${'AB'[i]} — synced to ${other.bpm.toFixed(1)} BPM`);
@@ -480,7 +481,7 @@ function renderPartMix(body, f, slots) { const D = f.D, M = D.partMix || (D.part
   body.innerHTML = `<div class="dk-partmix">${used.map((x) => `<div class="dk-pm" data-pm="${x}"><h4>${x}</h4><div class="dk-knobs"></div><button class="btn" data-pmfx="${x}">Beat FX on the ${x} →</button></div>`).join('') || '<div class="dk-empty">This genre does not play this part.</div>'}
     <p class="dk-legend">Delay sends the part into the deck's tempo echo, Reverb into the room — both keep ringing after you turn them down. Mute a part with its button on the deck (PLAY).</p></div>`;
   for (const x of used) { const c = SLOT_CH[x], st = M[x] || (M[x] = { level: 1, echo: 0, verb: 0 }), box = $(`[data-pm="${x}"] .dk-knobs`, body);
-    dknob(box, { label: 'Level', min: 0, max: 1.5, value: st.level, def: 1, onchange: (v) => { st.level = v; send({ type: 'partGain', deck: DOCK.deck, ch: c, v }); } });
+    dknob(box, { label: 'Level', min: 0, max: 1.5, value: st.level, def: 1, onchange: (v) => { st.level = v; st.touched = true; send({ type: 'partGain', deck: DOCK.deck, ch: c, v }); clearTimeout(st.tl); st.tl = setTimeout(() => tastePartLevel(x, v), 700); } });
     dknob(box, { label: 'Delay', min: 0, max: 1, value: st.echo, def: 0, onchange: (v) => { st.echo = v; send({ type: 'partfx', deck: DOCK.deck, ch: c, echo: v > 0.005 ? v : -1 }); } });
     dknob(box, { label: 'Reverb', min: 0, max: 1, value: st.verb, def: 0, onchange: (v) => { st.verb = v; send({ type: 'partfx', deck: DOCK.deck, ch: c, verb: v }); } }); }
   $$('[data-pmfx]', body).forEach((b) => b.onclick = () => { const i = DOCK.deck; SHELL.fxDeck = i; bfxTarget(i, SLOT_CH[b.dataset.pmfx]); go('fx'); }); }

@@ -21,7 +21,7 @@ async function saveDeckToLib(i, asNew) { const D = decks[i]; if (!D.score || !D.
   if (typeof tasteKeep === 'function') tasteKeep(i, 2); toast(old ? `${r.title} — updated in your library` : `${r.title} — saved to your library`); renderMyLib(); return r; }
 async function loadLibTrack(i, id, play) { const r = LIB.tracks.find((t) => t.id === id); if (!r) return null; await startAudio(); if (!deckFree(i)) { toast(onAirMsg(i)); return null; }
   let s; try { s = await compileAsync(JSON.parse(JSON.stringify(r.spec)), { fastLevels: true }); } catch (e) { toast(`${r.title} would not load: ${e.message.split('\n')[0]}`); return null; }
-  if (!deckFree(i)) { toast(onAirMsg(i)); return null; } installScore(i, s, { play: !!play && !decks[i ^ 1].playing }); if (s.levelPending) refineInWorker(i, s); const D = decks[i]; D.libId = r.id; hotOf(D); D.hot = (r.hot || []).slice(0, HOT_N).concat(new Array(HOT_N).fill(null)).slice(0, HOT_N);
+  if (!deckFree(i)) { toast(onAirMsg(i)); return null; } installScore(i, s, { play: !!play && !decks[i ^ 1].playing, asSaved: true }); if (s.levelPending) refineInWorker(i, s); const D = decks[i]; D.libId = r.id; hotOf(D); D.hot = (r.hot || []).slice(0, HOT_N).concat(new Array(HOT_N).fill(null)).slice(0, HOT_N);
   r.plays = (r.plays || 0) + 1; libPut('tracks', r).catch(() => {}); renderDeckHead(i); return s; }
 // a playlist played as a set: the first track on the free deck (playing), the second waiting on the other one; Auto-DJ then mixes the list
 // in order (app.js autoTick asks libNext before it composes)
