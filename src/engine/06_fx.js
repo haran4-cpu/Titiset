@@ -14,14 +14,16 @@ class FxVoice { constructor() { this.on = 0; this.kind = 0; this.t = 0; this.dur
   this.f0 = 0; this.f1 = 0; this.fc = 0; this.idx = 0; this.gl = 1; this.gr = 1; this.nb = 0; this.bf = 0; this.be = 0; this.bk = 0; this.cl = new Float32Array(FX_COMB); this.ci = 0; this.cn = 1; this.kill = 0; shape(this); } }
 const FX_COMB = 1200, FX_BUB = [0, 3, 7, 10, 12, 15, 19, 24]; // laser comb memory (samples); bubble pitch set (minor pentatonic-ish, semitones)
 // level per kind at velocity 1 (measured so the new kinds sit with the riser and the crash: tools/fx_test.cjs)
+const CANDY_GAIN = [0, 0, 0, 0, 0, 0, 0, 0.17, 0.25, 0, 1.69, 0.36, 0.5]; // (v9.5) the rebuilt candy's level per kind (set by tools/candy_test.cjs against the 9.4 sounds)
 const FX_GAIN = [1, 1, 1, 1, 1, 1, 1, 0.33, 0.24, 0.53, 0.4, 0.29, 0.31];
 class Fx {
   constructor(sr) { this.sr = sr; this.v = Array.from({ length: 8 }, () => new FxVoice()); this.i = 0; this.gain = 1; this.ctr = 0;
     // the ear candy's own echo: the psy 3/16 ping-pong (0.75 beat), band-limited in its feedback, running only while it rings
     this.eL = new Float32Array(128); this.eR = new Float32Array(128); this.dn = Math.round(sr * 1.6); this.dL = new Float32Array(this.dn); this.dR = new Float32Array(this.dn); this.dw = 0; this.dd = Math.round(sr * 0.31); this.tail = 0; this.hpL = 0; this.hpR = 0; this.lpL = 0; this.lpR = 0; this.eWet = 0.42; this.eFb = 0.48;
-    this.killN = Math.max(1, Math.round(sr * 0.005)); this.killK = 1 / this.killN; this.tx = [new TxVoice(sr), new TxVoice(sr), new TxVoice(sr), new TxVoice(sr)]; this.txi = 0; this.sps = sr * 60 / 124 / 4; shape(this); }
+    this.killN = Math.max(1, Math.round(sr * 0.005)); this.killK = 1 / this.killN; this.tx = [new TxVoice(sr), new TxVoice(sr), new TxVoice(sr), new TxVoice(sr)]; this.txi = 0; this.cv = [new CandyVoice(sr), new CandyVoice(sr), new CandyVoice(sr), new CandyVoice(sr)]; this.cvi = 0; this.mask = 0x89; this.root = 0; this.legacy = 0; /* (legacy: the 9.4 candy, for tools/candy_test.cjs) */ this.sps = sr * 60 / 124 / 4; shape(this); }
   setTempo(bpm) { this.dd = clamp(Math.round(this.sr * 60 / Math.max(40, bpm) * 0.75), 64, this.dn - 2); this.sps = this.sr * 60 / Math.max(40, bpm) / 4; }
   trigger(off, kind, vel, durSamples, note, pan, rec) { if (kind === 13) { const t = this.tx[this.txi]; this.txi = (this.txi + 1) % this.tx.length; t.trigger(off, rec | 0, vel, durSamples, note, pan, this.sps); return; } // (v9.5) a layered transition recipe (06c_risers.js): rec = the recipe, note = the key, pan = the chord's third
+    if (kind >= 7 && kind <= 12 && kind !== 9 && !this.legacy) { const c = this.cv[this.cvi]; this.cvi = (this.cvi + 1) % this.cv.length; c.trigger(off, kind, vel * CANDY_GAIN[kind], durSamples, note, pan, this.mask, this.root); return; } // (v9.5) the rebuilt ear candy (06e_candy.js)
     const v = this.v[this.i]; this.i = (this.i + 1) % this.v.length;
     v.on = 1; v.kill = 0; v.kind = kind; v.t = 0; v.wait = off; v.vel = vel * (FX_GAIN[kind] ?? 1); v.dur = Math.max(1, durSamples); v.ph = 0; v.ph2 = 0; v.b1.reset(); v.b2.reset(); v.z = 0; v.pan = noise() * 0.35; for (let k = 0; k < 6; k++) v.cp[k] = (noise() + 1) * 0.5;
     if (kind === 5 || kind === 6) { v.b1.set(kind === 5 ? 7200 : 6400, 0.9, this.sr); v.b2.set(kind === 5 ? 6800 : 5800, 0.9, this.sr); }
@@ -31,10 +33,11 @@ class Fx {
       if (kind === 12) { v.cl.fill(0); v.cn = clamp(Math.round(this.sr / (f * 2)), 8, FX_COMB - 1); } } }
   // (v9.2) a seek / jump / load fades what is sounding over 5 ms — it was cut dead, a step of up to −6 dBFS: a click on every DJ jump —
   // and the ear candy's echo rings out on its own (its delay lines were emptied: the repeats stopped mid-air)
-  stopAll() { for (const v of this.v) { if (!v.on) continue; if (v.wait > 0) v.on = 0; else if (!v.kill) v.kill = this.killN; } for (const t of this.tx) { if (!t.on) continue; if (t.wait > 0) t.on = 0; else if (!t.kill) t.kill = 220; } }
+  stopAll() { for (const v of this.v) { if (!v.on) continue; if (v.wait > 0) v.on = 0; else if (!v.kill) v.kill = this.killN; } for (const t of this.tx) { if (!t.on) continue; if (t.wait > 0) t.on = 0; else if (!t.kill) t.kill = 220; } for (const c of this.cv) { if (!c.on) continue; if (c.wait > 0) c.on = 0; else if (!c.kill) c.kill = 220; } }
   render(L, R, n) {
     const sr = this.sr, inv = 1 / sr, eL = this.eL, eR = this.eR; let candy = false; eL.fill(0, 0, n); eR.fill(0, 0, n);
     for (const t of this.tx) if (t.on) t.render(L, R, n, this.gain);
+    for (const c of this.cv) if (c.on) { c.render(eL, eR, n, this.gain); candy = true; }
     for (const v of this.v) { if (!v.on) continue; const oL = v.kind >= 7 ? eL : L, oR = v.kind >= 7 ? eR : R; if (v.kind >= 7) candy = true;
       for (let i = 0; i < n; i++) { if (v.wait > 0) { v.wait--; continue; }
         const t = v.t * inv, p = v.t / v.dur; v.t++; let yl = 0, yr = 0;
