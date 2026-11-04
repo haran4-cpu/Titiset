@@ -27,7 +27,7 @@
   - A track leans towards one character (organic, analog, digital, airy, dark or bright).
   - Two parts avoid the same engine, and avoid two bright voices in one register.
   - Every pick is varied for its track (`varyKit`: cutoff, decay, FM index, grain, body…). Its level is matched in context, as before.
-  - Measured with `tools/timbre_diversity.cjs` on 12 genres × 6 tracks: the mean spectral-shape distance between two tracks of the same genre went from **6.8 dB (9.3) to 9.8 dB**.
+  - Measured with `tools/timbre_diversity.cjs` on 12 genres × 6 tracks: the mean spectral-shape distance between two tracks of the same genre went from **6.8 dB (9.3) to 9.9 dB**.
 - **Six new drum kit families:** CR-78-style, minimal, industrial, vintage break, trap and garage, 12 in all. Each is built on an older family's voices and then re-voiced. About half the tracks of a genre now play one of the families that also suit it.
 - **32 percussion instruments** (9.3: 16): surdo, tabla, udu, frame drum, finger snap, temple block, cuica, hand bell, gong, metal pipe, click, zap, blip, noise sweep, cabasa and log drum, each level-trimmed against the older ones. A track may swap a percussion voice for one of its family (organic or machine).
 - **EDIT · Sound:**

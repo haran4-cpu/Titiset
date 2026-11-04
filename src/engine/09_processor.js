@@ -258,6 +258,12 @@ class Engine {
 }
     // every live code path is exercised too (score swap, jumps, loops, FX rack, energy, EQ, kit tweaks, sends, cue, transition,
     // glide): measured, the FIRST time a path ran on the audio thread it cost a 6–16 ms block (the JIT re-optimising) — a dropout
+// (v9.4) the new engines' branches — every FM algorithm, phase-distortion wave, material, oscillator pairing, filter and drive type, the
+// sub — run once in warm-up: a palette sound that was first to reach one compiled it on the audio thread (measured: a 25 ms block in
+// a trap drop in the browser certification)
+function xWarm(model) { const L = [{}, { sub: 0.3, stereo: 0.6, lfoAmp: 0.3, pEnv: 3 }]; for (let f = 1; f <= 7; f++) L.push({ flt: f, cut: 1500, res: 0.4, envAmt: 1 }); for (let d = 1; d <= 5; d++) L.push({ dtype: d, drv: 0.4 });
+  if (model === 'fm4') for (let a = 0; a < 8; a++) L.push({ algo: a, fb: 0.3, i3: 0.5, i4: 0.5 }); else if (model === 'pd') for (let w = 0; w < 4; w++) L.push({ pdw: w, det2: 0.4 }); else if (model === 'modal') for (let k = 0; k < 8; k++) L.push({ mat: k });
+  else if (model === 'va') for (let a = 0; a < 4; a++) L.push({ osc1: a, osc2: (a + 1) & 3, sync: a === 1 ? 0.5 : 0, ring: a === 2 ? 0.5 : 0, xmod: a === 3 ? 0.5 : 0, oct2: a === 0 ? -1 : 0 }); else if (model === 'add') L.push({ stretch: 0.2, fpk: 1200 }); return L; }
 function warmUp(m, sr) { const E = new Engine(sr), L = new Float32Array(128), R = new Float32Array(128), CL = new Float32Array(128), CR = new Float32Array(128); const run = (n) => { for (let i = 0; i < n; i++) E.render(L, R, 128, CL, CR); };
       for (const s of m.scores) { E.cmd({ type: 'load', deck: 0, score: s, cal: s.cal || null, play: true, from: s.from || 0 }); run(m.blocks || 300); } // with calibration: the tone EQ / width paths warm too
       const s0 = m.scores[0], s1 = m.scores[1] || s0; E.cmd({ type: 'load', deck: 1, score: s1, cal: null, play: false, from: s1.from || 0 }); const p = () => E.decks[0].pos;
@@ -276,7 +282,7 @@ function warmUp(m, sr) { const E = new Engine(sr), L = new Float32Array(128), R 
       { if (WV.ok) for (let t = 0; t < WT_NAMES.length; t++) if (!WV.wtDone[t]) { const tab = wtGet(t); for (let k = 0; k < WT_L; k++) WV.wt[t][k].set(tab[k]); WV.wtDone[t] = 1; }
         const Lw = new Float32Array(128), Rw = new Float32Array(128);
         for (const mono of [false, true]) { const S = new Synth(sr, mono ? 1 : 4, mono); S.bpm = 124;
-          for (const model of Object.keys(MODEL)) for (const extra of model === 'wt' ? [{ ftype: 0, uni: 7, fold: 0.3, sub: 0.3 }, { ftype: 1, l2Sync: 1 }, { ftype: 2, noiseAmt: 0.1 }, { ftype: 3, vowLfo: 0.5 }, { ftype: 4 }] : [{}, { tone: 0.5, pEnv: 3, lfoAmp: 0.3, lfoSync: 1, mLfoS: 2, mLfo: 0.3 }]) {
+          for (const model of Object.keys(MODEL)) for (const extra of model === 'wt' ? [{ ftype: 0, uni: 7, fold: 0.3, sub: 0.3 }, { ftype: 1, l2Sync: 1 }, { ftype: 2, noiseAmt: 0.1 }, { ftype: 3, vowLfo: 0.5 }, { ftype: 4 }] : MODEL[model] >= X_FIRST ? xWarm(model) : [{}, { tone: 0.5, pEnv: 3, lfoAmp: 0.3, lfoSync: 1, mLfoS: 2, mLfo: 0.3 }]) {
             S.setKit(Object.assign({ model }, extra)); for (const nt of mono ? [40] : [48, 60, 67]) S.trigger(0, nt, 0.8, 3000, mono ? { accent: true } : null); if (mono) S.trigger(1500, 43, 0.8, 3000, { slide: true });
             for (let i = 0; i < 24; i++) S.render(Lw, Rw, 128); S.releaseAll(); for (let i = 0; i < 8; i++) S.render(Lw, Rw, 128); } } }
       for (const n of FX_NAMES.concat(['repeat', 'tape', 'swirl'])) { E.cmd({ type: 'fx', deck: 0, name: n, on: true, amt: 0.6 }); run(12); } for (const n of FX_NAMES.concat(['repeat', 'tape', 'swirl'])) E.cmd({ type: 'fx', deck: 0, name: n, on: false }); run(40);
