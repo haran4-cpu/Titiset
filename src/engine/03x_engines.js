@@ -39,10 +39,16 @@ function initX(S, v, P, f, opt) { const sr = S.sr, m = S.m;
     const Lb = 2400, k = Math.max(1, Math.round(Lb * f / sr)), fb = k * sr / Lb; v.kl = Lb; v.d2 = fb; /* read at f / fb: the exact pitch, glide included */ let a = 0, b = 0, c = 0, lp = 0, mx = 1e-9;
     for (let i = 0; i < Lb; i++) { a += k / Lb; if (a >= 1) a -= 1; b += k / Lb; if (b >= 1) b -= 1; c += 2 * k / Lb; if (c >= 1) c -= 1; const bb = b + 0.37 >= 1 ? b - 0.63 : b + 0.37, s = (2 * a - 1) * 0.5 + (2 * bb - 1) * 0.35 + /* (every layer a whole number of cycles over the buffer: the texture is exactly periodic, in tune) */ Math.sin(TAU * c) * 0.3 + noise() * P.noiseAmt; lp += (s - lp) * (0.15 + 0.8 * P.bright); v.ks[i] = lp; mx = Math.max(mx, Math.abs(lp)); }
     for (let i = 0; i < Lb; i++) v.ks[i] /= mx; for (let g = 0; g < 4; g++) { v.ph[g] = (g * 613) % Lb; v.ph[4 + g] = g / 4; } }
-  else if (m === MODEL.pluck2) { const per = clamp(sr / f, 9, 2390), Li = Math.floor(per - 0.6), dl = per - Li - 0.5; v.kl = Li; v.kz = (1 - dl) / (1 + dl); v.apx = 0; v.apy = 0; let z = 0; const pk = Math.max(1, Math.round(Li * clamp(P.pick, 0.05, 0.5)));
-    const ka = 0.2 + 0.75 * P.bright; for (let i = 0; i <= Li + 1; i++) { z += (noise() - z) * ka; v.ks[i] = z; }
-    { let mu = 0, e = 0; for (let i = 0; i <= Li + 1; i++) mu += v.ks[i]; mu /= Li + 2; for (let i = 0; i <= Li + 1; i++) { v.ks[i] -= mu; e += v.ks[i] * v.ks[i]; } const g = Math.sqrt(ka / (2 - ka) / 3) / Math.sqrt(e / (Li + 2) + 1e-12); for (let i = 0; i <= Li + 1; i++) v.ks[i] *= g; } // (v9.5) every pluck the same strength: the burst's DC taken out and its level set to the filtered noise's average (a dark pluck's level varied by ±4 dB with the noise drawn)
-    for (let i = Li + 1; i >= pk; i--) v.ks[i] -= v.ks[i - pk] * 0.9; v.kw = Li + 2; // the pick position: a comb on the excitation
+  else if (m === MODEL.pluck2) { const per = clamp(sr / f, 9, 2390), Li = Math.floor(per - 0.6), dl = per - Li - 0.5; v.kl = Li; v.kz = (1 - dl) / (1 + dl); v.apx = 0; v.apy = 0;
+    // (v9.5) the string's shape when it is let go — a triangle peaking at the pick position, as a real pluck — with a little noise for the
+    // grain of the pick, smoothed around the loop by Bright. 9.4 started from a burst of noise alone: over one period of a high note that
+    // gives a fundamental of random strength, so two plucks of the same note differed by up to 7 dB (p5…p95), and a track's level by the
+    // noise drawn before it. The triangle holds the fundamental: the same note now varies by under 0.3 dB.
+    const N = Li + 2, pp = clamp(P.pick, 0.05, 0.5), nz = 0.1 + 0.3 * P.bright, ka = 0.2 + 0.75 * P.bright, ks = v.ks;
+    for (let i = 0; i < N; i++) { const u = (i + 0.5) / N; ks[i] = (u < pp ? u / pp : (1 - u) / (1 - pp)) * (1 - nz) + noise() * nz; }
+    { let z = ks[N - 1]; for (let r = 0; r < 2; r++) for (let i = 0; i < N; i++) { z += (ks[i] - z) * ka; if (r) ks[i] = z; } } // a one-pole run twice round the period: smooth, and seamless where the loop closes
+    { let mu = 0, e = 0; for (let i = 0; i < N; i++) mu += ks[i]; mu /= N; for (let i = 0; i < N; i++) { ks[i] -= mu; e += ks[i] * ks[i]; } const g = Math.sqrt(ka / (2 - ka) / 3) / Math.sqrt(e / N + 1e-12); for (let i = 0; i < N; i++) ks[i] *= g; }
+    v.kw = N;
     const bf = 90 + 260 * P.body; v.s2.set(bf, 2.2, sr); v.s3.set(bf * 2.6, 3, sr); v.s2.reset(); v.s3.reset(); }
   else if (m === MODEL.hyper || m === MODEL.va || m === MODEL.pd || m === MODEL.add) { v.d2 = -1; for (let k = 0; k < 9; k++) v.ph[k] = m === MODEL.hyper ? ((Math.imul(k + 1, 2654435761) ^ v.e3) >>> 0) / 4294967296 : 0; for (let k = 0; k < 8; k++) v.pa[k] = 0; } }
 // one voice of a new engine, one block (same contract as Synth.voice)
