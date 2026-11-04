@@ -1,5 +1,10 @@
 # FORGE — changes
 
+- **9.5** — docs/CHANGES-v9.5.md: 66 layered transition recipes in key; ear candy rebuilt (Glass, Harp, Wind, Acid, Ping);
+  Mangle — eight beat-locked sound-design engines in two morphing slots; drums with ratchets, chance hits, flams, lane feel and the
+  same six knobs on every kit, a kick designer with key track; bass accents and styles; Answer bar and Lock to kick; Octave for every
+  part; the same core knobs on every synth; My library with playlists and Play set; Your sound — FORGE learns its user.
+
 - **9.4** — docs/CHANGES-v9.4.md: eight new synthesis engines, 403 presets tagged by character, six new drum kit families, 32
   percussion instruments, a sound palette drawn for every track; forms from a grammar with Radio / Club / Extended lengths; builds
   of many shapes (the noise riser under at most half of them); a second melodic voice and a top percussion loop; Extend · Ride ·

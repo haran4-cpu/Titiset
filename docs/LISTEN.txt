@@ -1,3 +1,14 @@
+FORGE 9.5 — listening guide (the preview pack: tools/listen_v95a.cjs <outdir>)
+=========================================================================
+
+Rendered by FORGE's own engine and MP3 encoder (192 kb/s). LEVELS.txt lists length, loudness and true peak.
+
+1. BUILDS INTO DROPS (build-1…8): the last 4 bars of a build and 2 of its drop, as the composer now writes them — a layered
+   recipe in the key of the track, and on some drops an impact or a sub drop. Listen for: risers that belong to the track.
+2. RECIPES ALONE (tx-*): six risers and downlifters, a sub drop, an impact, a swell — peak-normalised, for their shape.
+3. MANGLE (mangle-*): 2 bars of a drop as written, then 4 with one engine on. Listen for: in time, in key, no clicks.
+4. EAR CANDY (candy-*-new / -old): each rebuilt sound next to the 9.4 sound it replaces, on the same 4 bars of a drop.
+
 FORGE 9.4 — listening guide
 ===========================
 

@@ -5,6 +5,14 @@ swing, drum grammar, bass grammar, harmony, arrangement form, sound kits, mix ta
 engine that times every event to the sample. Two decks, phrase-aligned key-compatible mixing with a bass swap,
 quantised jumps and loops, live re-composition (key / mode / progression / tempo / variation) on the next bar line.
 
+## 9.5 in one paragraph
+A library and a memory: save tracks with every edit, Mangle and hot cue, build playlists that show how each pair meets, and
+Play set mixes them in order; FORGE learns your sound — the mood you pick stays, new tracks and Auto-DJ lean toward the sounds,
+genres, mixes and effects you choose (SET · Your sound shows it all and forgets on request). 66 layered risers, drops and impacts
+in key; ear candy rebuilt; Mangle, eight beat-locked sound-design engines on the FX screen; drums with ratchets, chance hits,
+flams, lane feel and the same six knobs on every kit; bass accents and styles; Answer bar; Octave for every part; the same core
+knobs on every synth. Details: docs/CHANGES-v9.5.md.
+
 ## 9.4 in one paragraph
 Many more sounds: eight new synthesis engines (4-operator FM, phase distortion, additive, struck/modal, granular, hyper saw,
 two-oscillator analog, plucked string) with seven filters and five drives, 403 presets tagged by character, six new drum kit
@@ -31,6 +39,9 @@ src/engine/03x_engines.js    (9.4) eight more engines (FM4, phase distortion, ad
 src/engine/03v_wasm.js       the voice's inner loop as WebAssembly (src/wasm/voice.c → 03w_voice_wasm.js, generated), bit-identical to the JavaScript
 src/engine/04_music.js       modes, roman-numeral parser, DIATONIC 7th/9th extension, voice leading, pattern DSL
 src/engine/05_genres.js      genre bible part 1 (11 contracts)   05b_genres2.js  part 2 (22 contracts)
+src/engine/06c_risers.js     (9.5) 66 layered transition recipes in key (risers, downlifters, sub drops, impacts, swells, washes)
+src/engine/06d_mangle.js     (9.5) MANGLE: eight beat-locked, key-aware sound-design engines in two morphing slots
+src/engine/06e_candy.js      (9.5) the ear candy rebuilt: Glass, Harp, Wind, Acid, Ping — phrases of the chord on the grid
 src/engine/06_fx.js          riser / impact / downlifter / sweep / snare-up / reverse / crash; ear candy (zap, rise, bubbles, swirl, squelch, laser) with its own 3/16 echo; texture beds
 src/engine/06b_motion.js     motion FX: the harmonic effects rack per deck (effects that know the chord)
 src/engine/07_mix.js         deck mixer (HP per channel, kick-triggered pump, sends, ensemble, DJ EQ + filter), Beat FX / Color FX units (9.3), master (glue, mono lows, soft clip, limiter, BS.1770 meter)
@@ -44,6 +55,7 @@ src/host/engine_worker.js    Worker host of the Buffered (formerly Stable) engin
 src/compose/composer.js      plan → score (struct-of-arrays events), hooks with a melodic grammar, bass grammar, chords/pad/arp/chop/seq roles, fills, builds
 src/compose/spec.js          FORGE Score Format v1: validate (path + fix on every message) → compile → score; export any score back; melody text; lint
 src/ui/                      English UI (index.html template, app.js decks/mixer/library, dock.js bottom editor, midi.js controller layer,
+                             (9.5) mangle.js the Mangle panel · drums.js drum/bass/chord tools · mylib.js My library and set prep · taste.js Your sound
                              perform.js Perform view / hot cues / headphone cue / set save-load / recording (MP3), extend.js Extend · Ride · Endless, ai.js the Ask bar, ai_models.js the AI providers, style.css)
 src/host/selfcheck.js        the hardware check (dist/selfcheck.html): a panel that plays one track on YOUR machine and measures it (see "Checking a real machine")
 src/compose/bank.js          the sound bank: curated presets per slot (level-matched in context by spec.js); each track's own palette pick (character, engines, masking)
