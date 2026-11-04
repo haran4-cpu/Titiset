@@ -146,6 +146,19 @@ From IntelliDAW only ideas were taken: none of its presets, code or sounds.
 - MIDI export, the regular-effects pass and per-note bends move to 9.6.
 - The 9.5 sounds — transitions, Mangle and the rebuilt candy — were tested for level, clicks, timing and key. They were **not** judged by ear. The preview pack exists for that judgement.
 
+## Found and fixed by the release gate
+- **The glitch counter was blind on current Chrome.** Chrome renamed the sound card's counter, from `AudioContext.playoutStats` (`fallbackFramesEvents`) to `AudioContext.playbackStats` (`underrunEvents`), and Chrome 153 has only the new name. 9.2–9.4 read only the old name, which caused three things:
+  - On a current Chrome, the Live engine counted no dropouts: the status line, the glitch watch and the Report all said nothing.
+  - The `health` failure that 9.2–9.4 put down to "this sandbox's browser" was this bug.
+  - The `startup` and `jumps` tests passed without measuring anything.
+  
+  FORGE now reads both names. With the counter working, the real-time tests in this sandbox count dropouts for the first time (see the gate results below).
+- **The plucked string's level depended on luck.** The pluck2 engine started each note from a burst of noise. Over one period of a high note, that burst gives a fundamental of random strength: two plucks of the same note differed by up to 7 dB (5th–95th percentile), and a whole track's level depended on the noise drawn before it. In the sound bank test, Muted string measured −1.2 LU alone and −3.6 LU after the other 400 presets.
+  - A note now starts from the string's shape when it is let go: a triangle peaking at the pick position, plus a little noise for the pick, smoothed by Bright. The same note now varies by under 0.3 dB, and Muted string measures −1.2 / −1.3 LU wherever it runs.
+  - The 13 plucked sounds' level table was re-measured (`tools/preset_gain.cjs` can now re-measure named sounds only).
+- **The first transition of a set could block the audio thread.** The warm-up now runs every transition recipe once before anything plays. The browser certification had measured 72–85 ms blocks at the drops of UK garage and lofi; re-run, they measure 3–5 ms.
+- **The Mangle panel forced a layout on every track load:** it measured its touch pad to place the dot, which cost 93 ms on a 3× slowed CPU. The dot is now placed in percent, and a load re-renders the panel only for the deck it shows.
+
 ## Tests
 - New: `riser_test`, `mangle_test`, `drum_knobs_test`, `register_test`, `candy_test`, `taste_test`, `library_ui_test` and `taste_ui_test`. All of them are in `tools/ci.cjs`.
 - The release gate results are below.
