@@ -14,7 +14,7 @@ class FxVoice { constructor() { this.on = 0; this.kind = 0; this.t = 0; this.dur
   this.f0 = 0; this.f1 = 0; this.fc = 0; this.idx = 0; this.gl = 1; this.gr = 1; this.nb = 0; this.bf = 0; this.be = 0; this.bk = 0; this.cl = new Float32Array(FX_COMB); this.ci = 0; this.cn = 1; this.kill = 0; shape(this); } }
 const FX_COMB = 1200, FX_BUB = [0, 3, 7, 10, 12, 15, 19, 24]; // laser comb memory (samples); bubble pitch set (minor pentatonic-ish, semitones)
 // level per kind at velocity 1 (measured so the new kinds sit with the riser and the crash: tools/fx_test.cjs)
-const CANDY_GAIN = [0, 0, 0, 0, 0, 0, 0, 0.17, 0.25, 0, 1.69, 0.36, 0.5, 0, 0.67, 0.23, 0.29, 0.52, 0.49, 0.52]; // (v10.1: 14–19 the minimal set — about 1–2 dB under Bubbles' energy, peaks no higher than its peak) // (v9.5) the rebuilt candy's level per kind (set by tools/candy_test.cjs against the 9.4 sounds)
+const CANDY_GAIN = [0, 0, 0, 0, 0, 0, 0, 0.17, 0.25, 0, 1.69, 0.36, 0.5, 0, 0.67, 0.23, 0.16, 0.52, 0.49, 0.52]; // (v10.1: 14–19 the minimal set — about 1–2 dB under Bubbles' energy, peaks no higher than its peak) // (v9.5) the rebuilt candy's level per kind (set by tools/candy_test.cjs against the 9.4 sounds)
 const CANDY_KINDS = [9, 14, 15, 16, 17, 18, 19, 7, 8, 10, 11, 12]; // (v10.1) Bubbles and the minimal set first: the default; the 9.5 rebuilt five after, off until switched on
 const CANDY_DEFAULT = (1 << 9) | (1 << 14) | (1 << 15) | (1 << 16) | (1 << 17) | (1 << 18) | (1 << 19);
 const FX_GAIN = [1, 1, 1, 1, 1, 1, 1, 0.33, 0.24, 0.53, 0.4, 0.29, 0.31, 1, 1, 1, 1, 1, 1, 1];

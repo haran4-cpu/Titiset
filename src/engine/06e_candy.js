@@ -44,7 +44,7 @@ class CandyVoice {
     else if (kind === 8 || kind === 12) { c.kn = clamp(Math.round(sr / f), 8, CANDY_KS - 1); c.ki = 0; c.kz = 0; let z1 = 0, z2 = 0; for (let i = 0; i < c.kn; i++) { z1 += (noise() - z1) * 0.5; z2 += (z1 - z2) * 0.5; c.ks[i] = z2 * 1.6 * Math.sin(Math.PI * i / c.kn); } /* (a burst low-passed twice and windowed: a round pluck, not a click) */ c.kd = kind === 8 ? 0.45 + 0.25 * g : 0.6 - 0.12 * this.ni; c.k = Math.exp(-1 / ((kind === 8 ? 0.6 : 0.35) * sr)); }
     else if (kind === 14) { c.k = Math.exp(-1 / (0.012 * sr)); c.ix = 1.2; c.ik = Math.exp(-1 / (0.004 * sr)); }
     else if (kind === 15) { c.k = Math.exp(-1 / (0.38 * sr)); c.ft = f * 0.985; }
-    else if (kind === 16) { c.svf.reset(); c.svf.set(f, 28, sr); c.k = 0; c.len = Math.round(0.0015 * sr); }
+    else if (kind === 16) { c.svf.reset(); c.svf.set(f, 28, sr); c.k = 0; c.e = 0; c.len = Math.round(0.0025 * sr); }
     else if (kind === 17) { c.k = Math.exp(-1 / (0.09 * sr)); c.svf.reset(); c.svf.set(1100, 1.1, sr); c.ph = (noise() + 1) * 0.5; }
     else if (kind === 18) { c.f = f * 0.5; c.ft = f; c.k = Math.exp(-1 / (0.04 * sr)); }
     else if (kind === 19) { c.k = 1; c.len = Math.round(0.009 * sr); }
@@ -59,7 +59,7 @@ class CandyVoice {
         if (this.kind >= 14) { const K = this.kind;
           if (K === 14) { c.ph += c.f * inv; if (c.ph >= 1) c.ph -= 1; c.ph2 += c.f * 2 * inv; if (c.ph2 >= 1) c.ph2 -= 1; c.e = ct < atk ? a : c.e * c.k; y = sin1(c.ph + 0.1 * c.ix * sin1(c.ph2)) * c.e * c.g; c.ix *= c.ik; if (c.e < 1e-4 && ct > atk) c.on = 0; }
           else if (K === 15) { c.f += (c.ft - c.f) * 2e-5; c.ph += c.f * inv; if (c.ph >= 1) c.ph -= 1; c.e = ct < atk * 3 ? ct / (atk * 3) : c.e * c.k; y = sin1(c.ph) * c.e * c.g; if (c.e < 1e-4 && ct > atk * 3) c.on = 0; }
-          else if (K === 16) { const x = ct < c.len ? noise() * (1 - ct / c.len) : 0; c.svf.run(x); y = c.svf.bp * c.g * 4; if (ct > 0.15 * sr) c.on = 0; }
+          else if (K === 16) { const x = ct < c.len ? noise() * Math.sin(Math.PI * ct / c.len) : 0; c.e += (x - c.e) * 0.35; c.svf.run(c.e); y = c.svf.bp * c.g * 4; if (ct > 0.15 * sr) c.on = 0; } // (a Hann-shaped, low-passed grain: a woody tick, not a crackle)
           else if (K === 17) { c.ph += c.f * inv; if (c.ph >= 1) c.ph -= 1; c.e = ct < atk * 2 ? ct / (atk * 2) : c.e * c.k; c.svf.run(2 * c.ph - 1 - blep(c.ph, c.f * inv)); y = c.svf.lp * c.e * c.g; if (c.e < 1e-4 && ct > atk * 2) c.on = 0; }
           else if (K === 18) { c.f += (c.ft - c.f) * (1 - Math.exp(-1 / (0.008 * sr))); c.ph += c.f * inv; if (c.ph >= 1) c.ph -= 1; c.e = ct < atk ? a : c.e * c.k; y = sin1(c.ph) * c.e * c.g; if (c.e < 1e-4 && ct > atk) c.on = 0; }
           else { c.ph += c.f * inv; if (c.ph >= 1) c.ph -= 1; c.ph2 += c.f * 1.5 * inv; if (c.ph2 >= 1) c.ph2 -= 1; const r = 0.001 * sr, gt = ct < r ? ct / r : ct > c.len - r ? Math.max(0, (c.len - ct) / r) : 1; y = sin1(c.ph + 0.25 * sin1(c.ph2)) * gt * c.g; if (ct >= c.len) c.on = 0; } }
