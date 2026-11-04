@@ -65,6 +65,8 @@ static inline double lad_run(double *l, double x) { const double g = l[LD_g];
 static inline int wtLevel(double f, double sr) { const double allowed = 0.45 * sr / maxd(1, f); int k = 0; while (k < WT_L - 1 && (double)((WT_N / 2) >> k) > allowed) k++; return k; }
 static const double WT_VOW_[5][3] = { { 800, 1150, 2900 }, { 400, 1600, 2700 }, { 300, 2200, 3000 }, { 450, 800, 2830 }, { 325, 700, 2530 } };
 static const unsigned char TONE_M[32] = { 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0 };
+/* (v9.5) the classic models with no drive of their own (organ, supersaw, pad, stab, piano, ep, bell, kspluck, vox, strings, brass): a saturator after the tone filter once Drive is turned */
+static const unsigned char NODRIVE_M[32] = { 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 0 };
 
 EXPORT("voice") void voice(int n) {
   double *v = V, *lad = V + V_LAD, *s1 = V + V_S1, *s2 = V + V_S2, *s3 = V + V_S3, *s4 = V + V_S4; float *L = OL, *R = OR_;
@@ -76,7 +78,7 @@ EXPORT("voice") void voice(int n) {
   const double sus = P[P_aSus], fSus = P[P_fSus], pEnv = P[P_pEnv], lfoAmp = P[P_lfoAmp], ft = v[V_ft], outG = v[V_vel] * P[P_gain], gL = v[V_gl], gR = v[V_gr];
   double env = v[V_env], stage = v[V_stage], fenv = v[V_fenv], fstage = v[V_fstage], f = v[V_f], lfo = v[V_lfo], tt = v[V_t], len = v[V_len], relFast = v[V_relFast], fadeIn = v[V_fadeIn], ag = v[V_ag]; int alive = 1;
   int i = 0, wTt = 0, wTk = 0; double wA = 0, wB = 0, wFr = 0, wPm = 1, wCombD = 100, wCombG = 0;
-  const int toneOn = TONE_M[m & 31] == 1 && P[P_tone] < 0.999;
+  const int toneOn = TONE_M[m & 31] == 1 && P[P_tone] < 0.999, dzOn = NODRIVE_M[m & 31] == 1 && P[P_drive] > 1.02; const double dzK = dzOn ? P[P_drive] : 1, dzN = dzOn ? 1.0 / tanh_(P[P_drive]) : 1;
   int U = 1; if (m == 24) { double u = clampd((double)(int)P[P_uni], 1, G[G_ECO] >= 2 ? 2 : 7); U = (int)u; }
   const int ssThin = G[G_ECO] >= 2 ? 1 : 0; /* eco 2: a supersaw plays its centre and two outer saws (level-matched), not seven */
   const double *uOff = C + C_UOFF + (U - 1) * 7, *uPan = C + C_UPAN + (U - 1) * 7, uDet = P[P_detune] * 0.03, uG = 1 / __builtin_sqrt((double)U), uW = P[P_spread] * clampd((v[V_note] - 47) / 13, 0, 1);
@@ -150,7 +152,7 @@ EXPORT("voice") void voice(int n) {
           else for (int k = 0; k < N; k++) { const double off = m == 9 ? C[C_SAW + k] : (k - 1) * 0.012; const double dk = dt * (1 + off * D * 1); PH[k] += dk; if (PH[k] >= 1) PH[k] -= 1; const double o = 2 * PH[k] - 1 - blep(PH[k], dk);
             const double c = m == 9 ? (k == 3 ? 0.5 : 0.28) : 0.45; s += o * c; if (k & 1) sl += o * c; else srr += o * c; }
           svf_run(s1, s); y = s1[SV_lp]; const double w = P[P_width] * clampd((v[V_note] - 47) / 13, 0, 1); const double side = (sl - srr) * w * 0.35;
-          const double yl = (y + side) * env * outG * am, yr = (y - side) * env * outG * am; L[i] = (float)((double)L[i] + yl * gL); R[i] = (float)((double)R[i] + yr * gR); continue; }
+          double ya = y + side, yb = y - side; if (dzOn) { ya = tanh_(ya * dzK) * dzN; yb = tanh_(yb * dzK) * dzN; } const double yl = ya * env * outG * am, yr = yb * env * outG * am; L[i] = (float)((double)L[i] + yl * gL); R[i] = (float)((double)R[i] + yr * gR); continue; }
         case 11: {
           PH[0] += dt; if (PH[0] >= 1) PH[0] -= 1; PH[1] += dt * 1.004; if (PH[1] >= 1) PH[1] -= 1;
           const double s = (2 * PH[0] - 1 - blep(PH[0], dt)) * 0.55 + ((PH[1] < 0.5 ? 1 : -1) + blep(PH[1], dt) - blep(mod1(PH[1] + 0.5), dt)) * 0.35;
@@ -193,7 +195,7 @@ EXPORT("voice") void voice(int n) {
           const double d0 = dt * 0.997, d1 = dt * 1.003; PH[0] += d0; if (PH[0] >= 1) PH[0] -= 1; PH[1] += d1; if (PH[1] >= 1) PH[1] -= 1; const double s = (2 * PH[0] - 1 - blep(PH[0], d0)) + (2 * PH[1] - 1 - blep(PH[1], d1));
           svf_run(s1, s * 0.5); y = s1[SV_lp]; break; }
       }
-      if (toneOn) { svf_run(s4, y); y = s4[SV_lp]; }
+      if (toneOn) { svf_run(s4, y); y = s4[SV_lp]; } if (dzOn) y = tanh_(y * dzK) * dzN;
       y *= env * outG * am; L[i] = (float)((double)L[i] + y * gL); R[i] = (float)((double)R[i] + y * gR);
     }
     if (!alive) break;

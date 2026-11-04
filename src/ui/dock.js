@@ -22,6 +22,8 @@ const SYN_MODELS = Object.keys(MODEL);
 const P_SYN = [['cut', 'Cutoff', 80, 12000, 'log', 'Hz'], ['res', 'Reso', 0, 0.9], ['envAmt', 'Env amt', 0, 1], ['fDec', 'Env decay', 0.01, 1.5, 'log', 's'], ['aAtk', 'Attack', 0.001, 2, 'log', 's'], ['aDec', 'Decay', 0.02, 3, 'log', 's'],
   ['aSus', 'Sustain', 0, 1], ['aRel', 'Release', 0.02, 3, 'log', 's'], ['detune', 'Detune', 0, 1], ['drive', 'Drive', 1, 5], ['glide', 'Glide', 0, 0.3, 'lin', 's'], ['width', 'Width', 0, 1], ['gain', 'Level', 0, 1.5],
   ['lfoSync', 'LFO beats', 0.25, 16, 'log', 'beat'], ['lfoDepth', 'LFO→Filter', 0, 1], ['lfoAmp', 'LFO→Volume', 0, 1]];
+const SINE_M = new Set(['sub', 'b808']); // (a sine has no harmonics for a resonance or a filter envelope to work on)
+const SYN_CORE = new Set(['cut', 'res', 'envAmt', 'fDec', 'aAtk', 'aDec', 'aSus', 'aRel', 'drive', 'gain']); // (v9.5) on every synth sound
 const P_BASS = ['cut', 'res', 'envAmt', 'aDec', 'drive', 'glide', 'gain'], P_LEAD = ['cut', 'res', 'aAtk', 'aDec', 'aRel', 'detune', 'drive', 'gain'];
 const P_DRUM = {
   kick: [['fEnd', 'Body', 35, 80, 'lin', 'Hz'], ['len', 'Length', 0.15, 1.2, 'lin', 'beat'], ['punch', 'Punch', 0, 1], ['click', 'Click', 0, 1], ['drive', 'Drive', 1, 4], ['rumble', 'Rumble', 0, 1], ['gain', 'Gain', 0, 1.5]],
@@ -105,10 +107,16 @@ function dknob(parent, o) { // o: label, min, max, curve, unit, value, def, onch
   const l = document.createElement('span'); l.className = 'dk-kl'; l.textContent = o.label; w.append(c, l, val); draw(); parent.appendChild(w); return w; }
 function knobRow(parent, slot, list) { const row = document.createElement('div'); row.className = 'dk-knobs'; parent.appendChild(row);
   if (slot === 'snare') { const used = snareKinds(); list = [...(used.snare ? P_DRUM.snare.slice(0, 3) : []), ...(used.clap ? P_CLAP.slice(0, 3) : []), ...(used.rim ? P_RIM.slice(0, 1) : []), ['gain', 'Gain', 0, 1.5]]; } // the knobs of what the track really hits on the snare channel (snare body / clap / rim — one score can use all three)
-  if (!P_DRUM[slot]) { const md = kitVal(slot, 'model'), dead = X_LABEL[md] ? knobsHidden({ model: md, flt: kitVal(slot, 'flt') }) : MODEL_DEAD[md] || []; // only the knobs this model uses (measured: tools/model_params.cjs); a model with no filter of its own gets Tone in place of Cutoff
-    list = list.map((p) => (p[0] === 'cut' && TONE_MODELS.includes(md) ? ['tone', 'Tone', 0, 1, 'lin', ''] : p)).filter((p) => !dead.includes(p[0])); }
+  if (!P_DRUM[slot]) { const md = kitVal(slot, 'model'), dead = X_LABEL[md] ? knobsHidden({ model: md, flt: kitVal(slot, 'flt') }) : MODEL_DEAD[md] || []; // the knobs this model uses (measured: tools/model_params.cjs) …
+    // (v9.5) … and, on every model, the same core: Cutoff (a model with no filter of its own: its Tone filter; a struck, additive or granular
+    // one switches its 12 dB filter on when Cutoff is turned), Reso, Env amt, Env decay, the envelope, Drive (a saturator on the models
+    // that had none) and Level — the same knobs on every sound
+    list = list.map((p) => (p[0] === 'cut' && TONE_MODELS.includes(md) ? ['tone', 'Cutoff', 0, 1, 'lin', ''] : p)).filter((p) => !dead.includes(p[0]) || (SYN_CORE.has(p[0]) && !(SINE_M.has(md) && ['res', 'envAmt', 'fDec'].includes(p[0])))); }
   for (const p of list) { let [k, label, mn, mx, curve, unit] = p; if (slot === 'kick' && k === 'len' && !(kitVal('kick', 'len') > 0)) { k = 'aDec'; label = 'Decay'; mn = 0.05; mx = 1; curve = 'log'; unit = 's'; }
-    const v = kitVal(slot, k); dknob(row, { label, min: mn, max: mx, curve, unit, value: v == null ? mn : v, def: v, onchange: (x) => liveKit(slot, k, x) }); } return row; }
+    const v = kitVal(slot, k), md = kitVal(slot, 'model'), xm = !!X_LABEL[md];
+    dknob(row, { label, min: mn, max: mx, curve, unit, value: v == null ? mn : v, def: v, onchange: (x) => { if (!P_DRUM[slot] && xm && ['cut', 'res', 'envAmt', 'fDec'].includes(k) && knobsHidden({ model: md, flt: kitVal(slot, 'flt') }).includes(k)) liveKit(slot, 'flt', 2); // (a filterless engine: its 12 dB filter comes on)
+      if (!P_DRUM[slot] && TONE_MODELS.includes(md) && ['res', 'envAmt', 'fDec'].includes(k) && !(kitVal(slot, 'tone') < 0.999)) liveKit(slot, 'tone', 0.75); // (a Tone filter wide open is not running: it closes a little so its resonance and envelope act)
+      if (!P_DRUM[slot] && xm && k === 'drive') { if (!kitVal(slot, 'dtype')) liveKit(slot, 'dtype', 1); liveKit(slot, 'drv', clamp((x - 1) / 4, 0, 1)); } liveKit(slot, k, x); } }); } return row; }
 const TONE_MODELS = ['sub', 'b808', 'organ', 'piano', 'ep', 'bell', 'kspluck', 'vox'];
 const synParams = (keys) => keys.map((k) => P_SYN.find((p) => p[0] === k));
 function presetSelect(slot) { const bank = SOUND_BANK[slot]; if (!bank) return ''; const D = decks[DOCK.deck], cur = D.spec && D.spec.sound && D.spec.sound[slot] && D.spec.sound[slot].preset || '';

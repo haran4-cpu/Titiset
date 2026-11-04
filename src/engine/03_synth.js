@@ -19,6 +19,7 @@ const FORMANT_REF = formantEnergy(440, VOWELS.a);
 function formantNorm(f0, F) { return clamp(Math.sqrt(FORMANT_REF / Math.max(1e-9, formantEnergy(f0, F))), 0.2, 3); }
 const MODEL = { sub: 0, b808: 1, reese: 2, acid: 3, pluck: 4, wobble: 5, fm: 6, organ: 7, log: 8, supersaw: 9, pad: 10, stab: 11, piano: 12, ep: 13, bell: 14, kspluck: 15, vox: 16, hoover: 17, screech: 18, strings: 19, brass: 20, lead: 21, saw: 22, square: 23, wt: 24 };
 function dflt() { return { model: 'saw', wave: 0, detune: 0.2, voices: 1, sub: 0, cut: 2000, res: 0.2, envAmt: 0, fAtk: 0.001, fDec: 0.2, fSus: 0, aAtk: 0.002, aDec: 0.3, aSus: 0.8, aRel: 0.15, drive: 1, glide: 0.06, lfoRate: 0, lfoDepth: 0, lfoSync: 0, gain: 1, oct: 0, vowel: 'a', index: 2, ratio: 1, bright: 0.5, width: 0.5, pw: 0.5, keytrack: 0.3, pEnv: 0, pDec: 0.05, noiseAmt: 0, subPost: 0, mCut: 0, mRes: 0, lfoAmp: 0, lfoShape: 0, table: 0, pos: 0, posEnv: 0, posLfo: 0, l2Sync: 0, l2Rate: 0, l2Pitch: 0, uni: 1, spread: 0.6, fold: 0, ftype: 0, vow: 0, vowLfo: 0, mPos: 0, mLfo: 0, mLfoS: 0, tone: 1 }; } // mCut (octaves) / mRes: automation from the score; lfoAmp: tempo-locked volume LFO (0 sine · 1 gate · 2 saw)
+const NODRIVE_M = new Uint8Array(32); for (const k of ['organ', 'supersaw', 'pad', 'stab', 'piano', 'ep', 'bell', 'kspluck', 'vox', 'strings', 'brass']) NODRIVE_M[MODEL[k]] = 1; // (v9.5) the classic models with no drive of their own
 const TONE_M = new Uint8Array(32); for (const k of ['sub', 'b808', 'organ', 'piano', 'ep', 'bell', 'kspluck', 'vox']) TONE_M[MODEL[k]] = 1; // models with no filter of their own: they get the TONE low-pass
 class Voice {
   constructor(sr) { this.sr = sr; this.on = 0; this.wait = 0; this.len = 0; this.stage = 0; this.env = 0; this.fenv = 0; this.fstage = 0; this.note = 60; this.f = 220; this.ft = 220; this.vel = 1; this.age = 0; this.acc = 0;
@@ -74,7 +75,7 @@ class Synth {
     const sus = P.aSus, fSus = P.fSus, pEnv = P.pEnv, lfoAmp = P.lfoAmp, ft = v.ft, outG = v.vel * P.gain, gL = v.gl, gR = v.gr;
     let env = v.env, stage = v.stage, fenv = v.fenv, fstage = v.fstage, f = v.f, lfo = v.lfo, tt = v.t, len = v.len, relFast = v.relFast, fadeIn = v.fadeIn, ag = v.ag, alive = 1;
     let i = 0, wT = null, wA = 0, wB = 0, wFr = 0, wPm = 1, wCombD = 100, wCombG = 0;
-    const toneOn = TONE_M[m] === 1 && P.tone < 0.999;
+    const toneOn = TONE_M[m] === 1 && P.tone < 0.999, dzOn = NODRIVE_M[m] === 1 && P.drive > 1.02, dzK = dzOn ? P.drive : 1, dzN = dzOn ? 1 / tanh(P.drive) : 1; // (v9.5) Drive on the models that had none: a saturator after the tone filter, only once it is turned
     const ssThin = ECO.level >= 2 ? 1 : 0; // eco 2 (the CPU watchdog's last step): a supersaw plays its centre and two outer saws (level-matched), not seven
     const U = m === 24 ? clamp(P.uni | 0, 1, ECO.level >= 2 ? 2 : 7) : 1, uOff = UNI_OFF[U - 1], uPan = UNI_PAN[U - 1], uDet = P.detune * 0.03, uG = 1 / Math.sqrt(U), uW = P.spread * clamp((v.note - 47) / 13, 0, 1);
     while (i < n) {
@@ -148,7 +149,7 @@ class Synth {
             else for (let k = 0; k < N; k++) { const off = m === 9 ? SUPERSAW_DET[k] : (k - 1) * 0.012; const dk = dt * (1 + off * D * (m === 9 ? 1 : 1)); v.ph[k] += dk; if (v.ph[k] >= 1) v.ph[k] -= 1; const o = 2 * v.ph[k] - 1 - blep(v.ph[k], dk);
               const c = m === 9 ? (k === 3 ? 0.5 : 0.28) : 0.45; s += o * c; if (k & 1) sl += o * c; else srr += o * c; }
             v.s1.run(s); y = v.s1.lp; const w = P.width * clamp((v.note - 47) / 13, 0, 1); const side = (sl - srr) * w * 0.35; // width tapers to mono below B2 (no wide lows)
-            const yl = (y + side) * env * outG * am, yr = (y - side) * env * outG * am; L[i] += yl * gL; R[i] += yr * gR; continue; }
+            let ya = y + side, yb = y - side; if (dzOn) { ya = tanh(ya * dzK) * dzN; yb = tanh(yb * dzK) * dzN; } const yl = ya * env * outG * am, yr = yb * env * outG * am; L[i] += yl * gL; R[i] += yr * gR; continue; }
           case 11: { // stab: saw + square, SVF with fast envelope
             v.ph[0] += dt; if (v.ph[0] >= 1) v.ph[0] -= 1; v.ph[1] += dt * 1.004; if (v.ph[1] >= 1) v.ph[1] -= 1;
             const s = (2 * v.ph[0] - 1 - blep(v.ph[0], dt)) * 0.55 + ((v.ph[1] < 0.5 ? 1 : -1) + blep(v.ph[1], dt) - blep((v.ph[1] + 0.5) % 1, dt)) * 0.35;
@@ -191,7 +192,7 @@ class Synth {
             const d0 = dt * 0.997, d1 = dt * 1.003; v.ph[0] += d0; if (v.ph[0] >= 1) v.ph[0] -= 1; v.ph[1] += d1; if (v.ph[1] >= 1) v.ph[1] -= 1; const s = (2 * v.ph[0] - 1 - blep(v.ph[0], d0)) + (2 * v.ph[1] - 1 - blep(v.ph[1], d1));
             v.s1.run(s * 0.5); y = v.s1.lp; break; }
         }
-        if (toneOn) { v.s4.run(y); y = v.s4.lp; }
+        if (toneOn) { v.s4.run(y); y = v.s4.lp; } if (dzOn) y = tanh(y * dzK) * dzN;
         y *= env * outG * am; L[i] += y * gL; R[i] += y * gR;
       }
       if (!alive) break;
