@@ -462,7 +462,7 @@ body.shell { height: 100vh; height: 100dvh; overflow: hidden; padding-bottom: 0 
 .shell .screen[data-screen=edit] :is(.dk-tabs button, .dk-deck button, .dk-pages button, .dk-seg button, .btn) { min-height: 40px; }
 /* PLAY: the decks, the transport pinned to the bottom of the screen */
 .shell .screen[data-screen=play] .scr-in { padding-bottom: 0; }
-.transport { position: sticky; bottom: 0; z-index: 5; display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 8px; padding: 10px 0 12px; background: linear-gradient(to top, var(--ink) 75%, transparent); }
+.transport { position: sticky; bottom: 0; z-index: 5; display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 8px; padding: 16px 0 12px; background: linear-gradient(to top, var(--ink) calc(100% - 14px), transparent); } /* (v10: opaque under its own rows — the Next mix row read through onto the deck's controls) */
 .transport .tp { min-height: 60px; border-radius: var(--r); border: 1px solid var(--line2); background: var(--panel2); font: 700 18px var(--f-ui); letter-spacing: .04em; }
 .transport .tp.on { border-color: var(--good); color: var(--good); }
 .transport .tp.mix { display: grid; place-content: center; gap: 2px; border-color: var(--b); color: var(--b); }

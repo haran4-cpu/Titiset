@@ -2,7 +2,7 @@ plugins { id 'com.android.application' }
 android {
     namespace 'app.forge.decks'
     compileSdk 34
-    defaultConfig { applicationId 'app.forge.decks'; minSdk 26; targetSdk 34; versionCode 950; versionName '9.5.0' }
+    defaultConfig { applicationId 'app.forge.decks'; minSdk 26; targetSdk 34; versionCode 1000; versionName '10.0.0' }
     buildTypes { release { minifyEnabled false } }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     // the web app (dist/) is copied into the assets by the copyWebApp task: index.html, the workers, the manifest
