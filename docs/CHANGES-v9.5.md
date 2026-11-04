@@ -162,3 +162,42 @@ From IntelliDAW only ideas were taken: none of its presets, code or sounds.
 ## Tests
 - New: `riser_test`, `mangle_test`, `drum_knobs_test`, `register_test`, `candy_test`, `taste_test`, `library_ui_test` and `taste_ui_test`. All of them are in `tools/ci.cjs`.
 - The release gate results are below.
+
+## Release gate
+`node tools/ci.cjs --gate` on the final tree, in a 2-core cloud sandbox with a headless Chromium 153. It ran in three parts, because one command may run for at most 2 hours.
+
+**This sandbox's sound device:**
+- It is a headless sink whose clock runs 4.4 % off the computer's (the self-check page measured −43 844 ppm). It is not a sound card.
+- Since the glitch-counter fix, the real-time tests count its under-runs as dropouts. Earlier gates could not see them at all.
+- So these results are the first in which the soaks, the certification and the self-check judge dropouts in this sandbox. Their failures are reported as they came. The tests' limits are unchanged.
+
+**Engine and score — 31 of 31 pass:**
+- Score round trip and fuzz; timing; live control; engine flows; FX; cue; rhythm statistics; Beat FX.
+- Transition styles and Auto-DJ variety: 8.2 different styles per 10 mixes.
+- Forms; the new tests for risers, Mangle, drum knobs, register, candy and taste; MP3.
+- **The sound bank:** all 403 presets level-matched and clean, Muted string included.
+- Tuning: 732 notes, worst 4.75 cents.
+- Live command blocks; motion; knobs: 800 of 800 act.
+- True peak: worst −1.15 dBTP.
+- WebAssembly bit-identical; genre signatures; dead code; controls.
+- CPU inside the budget.
+
+**Browser — 25 of 30 pass:**
+- **Pass:**
+  - startup: 1 of 4 starts glitched, against an allowed 2;
+  - jumps: 0 of 10;
+  - layout; export (WAV, stems, MP3); MIDI clock; phase lock;
+  - health: the forced overload is now counted, 89 glitches;
+  - the UI suites: browser, flows, dock, live, perform, library, taste, shell, Ask, Auto, Auto moves, hosted, AI models, offline;
+  - stall; MIDI quality; the self-check page;
+  - **the 10-minute soak: clean.**
+- **✗ liveset:** the longest main-thread task was 160 ms, against a 100 ms limit, with 0 dropouts. This is the weak-machine test: the CPU is made 3× slower and 2 busy processes run beside it.
+  - Here the 9.4 build measured 171, 201 and 127 ms, and 9.5 measured 294, 111, 225 and 160 ms. Both builds fail this test in this sandbox; 9.4 passed it in its own sandbox at 61 ms.
+  - The one cost 9.5 added on a track load (the Mangle panel, 93 ms) is fixed above.
+- **✗ soak (4 minutes):** one dropout, 3 quanta, at 101 s.
+- **✗ soak-fallback (3 minutes):** one dropout, 1 quantum, at 19 s.
+- **✗ capture:** in the Live · fast engine, the audio thread's frame counter skipped twice. The captured audio is clean: no silence, no replayed buffer, 0 dropouts. Live and Stable passed, and the run before passed all three.
+- **✗ cert:** 4 of 66 sections fail.
+  - techno, progressive house and hard techno failed on 1–3 dropouts, with audio blocks of at most 6 ms.
+  - trance failed on a 58 ms block and 4 dropouts.
+  - The failing genres change from run to run: a run on a quiet machine had 1 failure (jersey club, 58 ms), and the genres that failed alone passed 3 times in a row.
