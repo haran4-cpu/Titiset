@@ -45,7 +45,7 @@ function deckSpec(score) { // the editable spec of a score: complete (every patt
   return sp; }
 function installScore(i, s, opt) { // a freshly composed / compiled score becomes the deck's track (loaded, not swapped)
   opt = opt || {}; const D = decks[i], other = decks[i ^ 1], otherLive = other.playing && other.score;
-  D.score = s; D.gid = s.meta.gid; D.native = s.meta.bpm; D.groove = null; D.partMix = null; D.loop = 0; /* (v9.3: a new track starts with the engine's groove and part levels: as written) */ D.pendJump = -1; D.pos = 0; D.ended = false; D.fresh = true; D.spec = deckSpec(s); D.val = null; D.lint = lintScore(s);
+  D.score = s; D.gid = s.meta.gid; D.native = s.meta.bpm; D.groove = null; D.partMix = null; D.loop = 0; /* (v9.3: a new track starts with the engine's groove and part levels: as written) */ D.pendJump = -1; D.pos = 0; D.ended = false; D.fresh = true; D.libId = null; D.spec = deckSpec(s); D.val = null; D.lint = lintScore(s);
   const { msg, transfer } = packScore(s); const bpm = otherLive ? other.bpm : 0, play = !!opt.play && !otherLive;
   send({ type: 'load', deck: i, score: msg, cal: cal(s.meta.gid), play, bpm: bpm || undefined, from: 0 }, transfer);
   D.bpm = bpm || s.meta.bpm; D.loading = null; // (v9.2) the tempo it will play at, at once (the box showed the last track's tempo until the analysis, 5–9 s later)

@@ -50,7 +50,7 @@ function buildShell() { const app = $('.app'), con = $('.console'); if (!app || 
   { const lp = document.createElement('div'); lp.className = 'lenpick'; lp.innerHTML = `<span class="lbl">New tracks</span><div class="seg" role="group" aria-label="Length of new tracks">${TRACK_LENS.map(([k, l, d]) => `<button data-len="${k}" title="${d}">${l}</button>`).join('')}</div>`; set.appendChild(lp); // (v9.4) Radio · Club · Extended
     const paint = () => $$('[data-len]', lp).forEach((b) => { const on = b.dataset.len === TRACK_LEN.v; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
     $$('[data-len]', lp).forEach((b) => b.onclick = () => { TRACK_LEN.v = b.dataset.len; try { localStorage.setItem('forge.len', TRACK_LEN.v); } catch (e) { /* per-viewer convenience only */ } paint(); toast(`New tracks: ${b.textContent} — ${b.title}`); }); paint(); }
-  if (lib) set.appendChild(lib);
+  if (lib) set.appendChild(lib); buildMyLib(); /* (v9.5) My library, above the genre library */
   if (top) { const tools = document.createElement('div'); tools.className = 'set-tools'; for (const b of $$('button.power', top)) tools.appendChild(b); set.appendChild(tools); const tele = $('.tele', top); if (tele) set.appendChild(tele); }
   // the status bar (not interactive) and the tab bar
   if (top) { const st = document.createElement('div'); st.className = 'status'; st.innerHTML = `<b>FORGE</b><span class="st-bpm">—</span><span class="st-lufs">—</span><span class="st-mix"></span>`; top.appendChild(st); }

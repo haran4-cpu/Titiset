@@ -600,6 +600,23 @@ body.shell { height: 100vh; height: 100dvh; overflow: hidden; padding-bottom: 0 
 /* (v9.5) the editor follows its own width (two screens side by side on a wide window give it half): one column under 900 px */
 .screen { container-type: inline-size; }
 @container (max-width: 900px) { .dk-split, .dk-split.wide { grid-template-columns: 1fr; } .dk-side { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); padding-top: 10px; } }
-@container (max-width: 700px) { .dk-row { grid-template-columns: 74px minmax(0, 1fr) 22px; gap: 6px; } .dk-bar { flex-wrap: wrap; gap: 6px; } .dk-tabs { order: 3; flex-basis: 100%; } .dk-ctx { margin-left: auto; } .dk-now { display: none; } }
+@container (max-width: 760px) { .dk-row { grid-template-columns: 74px minmax(0, 1fr) 22px; gap: 6px; } .dk-bar { flex-wrap: wrap; gap: 6px; } .dk-tabs { order: 3; flex-basis: 100%; } .dk-ctx { margin-left: auto; } .dk-now { display: none; } }
 @container (max-width: 480px) { .dk-row { grid-template-columns: 46px minmax(0, 1fr) 20px; } }
 .dk-c.ac.on { background: var(--dc); border-color: var(--dc); }
+
+/* (v9.5) My library */
+.mylib { display: grid; gap: 10px; }
+.ml-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; } .ml-head h3 { margin: 0 6px 0 0; } .ml-sp { flex: 1; }
+.ml-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; } .ml-q { flex: 1 1 200px; min-width: 0; }
+.ml-list, .ml-set { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.ml-row { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; justify-content: space-between; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); }
+.ml-main { display: grid; gap: 2px; min-width: 0; flex: 1 1 260px; } .ml-main input, .ml-main textarea { width: 100%; }
+.ml-t { font-size: 14px; overflow-wrap: anywhere; } .ml-m { font: 500 12px var(--f-data); color: var(--dim); } .ml-cam { color: var(--a); }
+.ml-tags { display: flex; flex-wrap: wrap; gap: 4px; } .ml-tags i { font: 500 11px var(--f-data); font-style: normal; padding: 1px 7px; border-radius: 9px; border: 1px solid var(--line2); color: var(--dim); }
+.ml-notes { font-size: 12px; color: var(--dim); }
+.ml-acts { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; } .ml-acts .btn { padding: 4px 10px; }
+.ml-star { background: none; border: 0; color: var(--a); font-size: 15px; letter-spacing: 1px; padding: 2px 4px; cursor: pointer; }
+.ml-gap { display: flex; gap: 10px; font: 500 11px var(--f-data); padding: 2px 10px 4px; color: var(--dim); } .ml-gap .ok { color: #72cf8e; } .ml-gap .warn { color: #e0a24a; }
+.ml-lhead { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; } .ml-name { flex: 1 1 180px; min-width: 0; }
+.ml-queue { margin: 0; font-size: 13px; padding: 6px 10px; border-left: 3px solid var(--a); }
+.btn.warn { border-color: #d65d7a; color: #f0a0b2; }

@@ -361,7 +361,7 @@ function autoTick() { if (!auto.on) return; const Da = decks[lead], b = lead ^ 1
     // (v9.2 review) a track already waiting on the other deck — loaded by hand, or cued for a mix that was called off (with your edits) —
     // is the one mixed in; Auto-DJ used to compose another one over it
     const waiting = Db.score && Db.fresh && !Db.loading; if (waiting) { auto.why = `${Db.score.meta.name}, waiting on deck ${'AB'[b]}`; const h = auto.hist = auto.hist || []; if (h[h.length - 1] !== Da.gid) h.push(Da.gid); h.push(Db.gid); if (h.length > 12) h.shift(); }
-    (waiting ? Promise.resolve(Db.score) : loadDeck(b, pickNext(Da.gid), { play: false })).then((s) => { if (!s || !auto.on || tx || Db.playing || !Da.playing) { auto.prepared = false; return; }
+    (waiting ? Promise.resolve(Db.score) : libNext(b) || loadDeck(b, pickNext(Da.gid), { play: false })).then((s) => { if (!s || !auto.on || tx || Db.playing || !Da.playing) { auto.prepared = false; return; }
     // (v9.2) the mix point may have passed meanwhile (a jump to the outro, a slow composition): the mix then starts on the next 4-bar
     // line and is shortened to what is left of the track — it started at once, off the beat, half done (measured: 3 sixteenths off)
     let at2 = at, len2 = auto.len; const now = schedPos(Da); if (at2 < now + 8) { at2 = nextPhrase(Da.score, now + 16, 4); len2 = Math.min(auto.len, Math.max(4, Math.floor((end - at2) / 16))); }
@@ -405,7 +405,7 @@ function buildDeck(i) {
   el.innerHTML = `<div class="dhead"><div class="dtag">${'AB'[i]}</div><div class="dtitle"><h2>Empty deck</h2><div class="dmeta"></div></div><span class="dstate">stopped</span></div>
     <div class="dempty"><p>Nothing on this deck yet. Pick a genre — it composes a new track — or choose one in the library below.</p><div class="chips">${['deep-house', 'techno', 'melodic-techno', 'trance', 'dnb', 'progressive-house', 'afro-house', 'downtempo'].map((g) => `<button class="btn" data-quick="${g}">${(GENRE_BY_ID[g] || { name: g }).name}</button>`).join('')}</div></div>
     <canvas class="map" height="118" aria-label="Arrangement map: click a section to jump"></canvas>
-    <div class="row"><button class="btn big play" data-act="play">Play</button><button class="btn" data-act="mix" title="Mix this deck into the other one on the next phrase">Mix in</button><button class="btn" data-act="reroll" title="New melodies and patterns from the next bar">New variation</button><button class="btn" data-export="mp3" title="Render the whole track to an MP3 (320 kbit/s, joint stereo) — FORGE's own encoder, in the background">MP3</button><button class="btn" data-export="wav" title="Render the whole track to a 24-bit WAV file — in the background, faster than real time">WAV</button><button class="btn" data-export="stems" title="The mix + five stems (drums, bass, chords+pad, lead+arp, fx) as WAV files in one zip — ready for a DAW">Stems</button>
+    <div class="row"><button class="btn big play" data-act="play">Play</button><button class="btn" data-act="mix" title="Mix this deck into the other one on the next phrase">Mix in</button><button class="btn" data-act="save" title="Save this track — with your edits, Mangle and hot cues — to My library (SET)">Save</button><button class="btn" data-act="reroll" title="New melodies and patterns from the next bar">New variation</button><button class="btn" data-export="mp3" title="Render the whole track to an MP3 (320 kbit/s, joint stereo) — FORGE's own encoder, in the background">MP3</button><button class="btn" data-export="wav" title="Render the whole track to a 24-bit WAV file — in the background, faster than real time">WAV</button><button class="btn" data-export="stems" title="The mix + five stems (drums, bass, chords+pad, lead+arp, fx) as WAV files in one zip — ready for a DAW">Stems</button>
       <span class="loopgrp"><span class="sep"></span><span class="lbl">Loop</span>${[4, 8, 16].map((l) => `<button class="btn loopb" data-l="${l}">${l}</button>`).join('')}</span></div>
     <div class="row jumps"></div>
     <div class="row ctl"><span class="lbl">Mood</span><select class="btn cmood" aria-label="Mood"><option value="">Genre</option>${Object.keys(MOODS).map((m) => `<option value="${m}">${m[0].toUpperCase() + m.slice(1)}</option>`).join('')}</select>
@@ -419,7 +419,7 @@ function buildDeck(i) {
   $('[data-act=play]', el).onclick = () => playPause(i);
   $$('[data-export]', el).forEach((b) => b.onclick = () => exportTrack(i, b.dataset.export === 'stems' || b.dataset.export === 'stems-mp3', /mp3/.test(b.dataset.export) ? 'mp3' : 'wav'));
   $('[data-act=mix]', el).onclick = async () => { await startAudio(); const D = decks[i]; if (!D.score) { toast('Load a genre into this deck first'); return; } if (!decks[i ^ 1].playing) { playPause(i); return; } mixInto(i); };
-  $('[data-act=reroll]', el).onclick = () => reroll(i);
+  $('[data-act=reroll]', el).onclick = () => reroll(i); $('[data-act=save]', el).onclick = () => saveDeckToLib(i);
   $('.cmood', el).onchange = (e) => setMood(i, e.target.value);
   $('.cb', el).onchange = (e) => setBpmLive(i, +e.target.value); $('.cb', el).onkeydown = (e) => { if (e.key === 'Enter') e.target.blur(); };
   $('.energy', el).oninput = (e) => { decks[i].energy = +e.target.value; send({ type: 'energy', deck: i, v: decks[i].energy }); };
