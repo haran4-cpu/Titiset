@@ -10,7 +10,7 @@ const CH = { kick: 0, snare: 1, hats: 2, perc: 3, bass: 4, chords: 5, pad: 6, le
 const CH_NAMES = ['kick', 'snare', 'hats', 'perc', 'bass', 'chords', 'pad', 'lead', 'arp', 'fx', 'texture'];
 const PERC_PAN = { tom: -0.25, conga: 0.5, bongo: -0.55, cowbell: 0.35, clave: -0.45, wood: 0.45, tamb: 0.6, timbale: -0.4, tick: 0.6, rim: 0.15, agogo: 0.4, guiro: -0.45, triangle: 0.55, djembe: -0.3, taiko: 0.1, maraca: 0.5, cajon: -0.1, surdo: -0.15, tabla: 0.35, udu: -0.35, frame: 0.2, snap: -0.5, temple: 0.45, cuica: -0.4, bell: 0.55, gong: 0, metal: -0.35, click: 0.6, zap: -0.5, blip: 0.4, sweep: 0, cabasa: 0.55, logdrum: -0.2 };
 const HAT_KIND = { hc: 0, ho: 1, ride: 2, sh: 3, crash: 4, ped: 5 };
-const FX_KIND = { riser: 0, impact: 1, down: 2, sweep: 3, snareup: 4, reverse: 5, crash: 6, zap: 7, rise: 8, bubbles: 9, swirl: 10, squelch: 11, laser: 12 };
+const FX_KIND = { riser: 0, impact: 1, down: 2, sweep: 3, snareup: 4, reverse: 5, crash: 6, zap: 7, rise: 8, bubbles: 9, swirl: 10, squelch: 11, laser: 12, tx: 13 };
 // ear candy (v9): the small one-shots producers fly over a groove — zaps, squelches, bubbles, lasers, swirls (06_fx.js), in key
 // and panned. Per family: the chance per bar in a drop (other sections scaled), the kinds with weights, and the chance of a swirl
 // into each 8-bar phrase. Psytrance lives on them (measured on v8: 0.1 FX per bar in its drops, all of them transitions); the
@@ -527,7 +527,21 @@ function planTx(P) { const r = rng(hashStr('tx/' + P.gid + '/' + P.seed)), fam =
     if (sec.type === 'break' && before && before.type === 'drop') { const fx = wpick(r, ['down', 'crash', 'sweep', 'none'], [3, 2, 1, 2].map((w, k) => (pIx && ['down', 'crash', 'sweep', 'none'][k] === pIx.fx ? 0 : w)));
       const end = wpick(r, ['echo', 'tape', 'stutter', 'cut'], [3, fam === 'bass' || fam === 'psy' || fam === 'hiphop' ? 3 : 1, 2, 1].map((w, k) => (pIx && ['echo', 'tape', 'stutter', 'cut'][k] === pIx.end ? w * 0.2 : w))); sec.ix = pIx = { fx, end }; before.outEnd = end; }
     else if (sec.type === 'break' && si > 0) sec.ix = { fx: r() < 0.5 ? 'down' : 'none', end: null };
-    if (sec.type === 'drop' && before && before.type !== 'build') { const k = wpick(r, ['fill', 'reverse', 'gap', 'none'], [3, 2, 2, 1].map((w, j) => (pDx && ['fill', 'reverse', 'gap', 'none'][j] === pDx ? 0 : w))); before.dx = pDx = k; } }); }
+    if (sec.type === 'drop' && before && before.type !== 'build') { const k = wpick(r, ['fill', 'reverse', 'gap', 'none'], [3, 2, 2, 1].map((w, j) => (pDx && ['fill', 'reverse', 'gap', 'none'][j] === pDx ? 0 : w))); before.dx = pDx = k; } });
+  planRecipes(P); }
+// (v9.5) the layered transition recipes (src/engine/06c_risers.js): each build's riser, each breakdown's downlifter, each drop's impact
+// and sub drop, each swell and wash is drawn from the genre family's own recipes, never twice in one track. Every draw has its own
+// stream (per section), after all the draws above, so the forms, the builds and an extended track's first sections do not move.
+const TX_SUBFAM = new Set(['house', 'techno', 'trance', 'psy', 'dnb', 'bass', 'hiphop', 'hard', 'garage', 'afro', 'latin', 'pop', 'breaks']);
+function planRecipes(P) { const fam = P.G.family, used = new Set();
+  const take = (type, r) => { const c = txRecipesFor(fam, type); if (!c.length) return -1; const free = c.filter((k) => !used.has(k)), pool = free.length ? free : c, k = pool[Math.floor(r() * pool.length) % pool.length]; used.add(k); return k; };
+  P.sections.forEach((sec, si) => { const r = rng(hashStr('txr/' + P.gid + '/' + P.seed + '/' + si)), tx = {};
+    if (sec.type === 'build' && sec.bx) { const fx = sec.bx.fx, u = r(); if (fx === 'riser' || (fx === 'none' && u < 0.4)) tx.rise = take('rise', r); else if (fx === 'sweep' && u < 0.5) tx.wash = take('wash', r); else if (fx === 'reverse' && u < 0.4) tx.swell = take('swell', r); }
+    if (sec.type === 'break' && sec.ix && sec.ix.fx === 'down') { if (r() < 0.7) tx.down = take('down', r); }
+    if (sec.dx === 'reverse' && r() < 0.5) tx.swell = take('swell', r);
+    if (sec.type === 'drop' || sec.layer === 'tease') { if (r() < 0.6) tx.impact = take('impact', r); if (sec.type === 'drop' && TX_SUBFAM.has(fam) && r() < 0.4) tx.sub = take('sub', r); }
+    for (const k in tx) if (tx[k] < 0) delete tx[k];
+    sec.tx = tx; }); }
 // ---------- the score ----------
 function composeTrack(gid, seed, o) {
   const P = planTrack(gid, seed, o), G = P.G, S = new ScoreBuilder();
@@ -581,17 +595,21 @@ function composeTrack(gid, seed, o) {
     writeAuto(G, sec, S); sec.nextType = next ? next.type : null; if (o == null || o.motion !== false) writeMotion(P, sec, si, S, mst, mst.lastEnd);
     // texture + fx cues at section starts
     S.push(sec.bar0 * 16, CH.tex, TEX_KIND[P.texture] || 0, (L.texture || 0) * (sec.type === 'drop' ? 0.6 : 1), 16, 0, 0);
+    const tx = sec.tx || {}, txN = 60 + (P.key % 12), txT = (MODES[P.mode] || MODES.minor)[2] === 4 ? 4 : 3; // (v9.5) layered recipes: the key's note and the tonic chord's third
     if (sec.type === 'build') { const bx = sec.bx || { fx: 'riser', shape: 'roll', end: mst.lastEnd }, e0 = (sec.bar0 + sec.bars) * 16, note = 72 + ((P.key + 12) % 12) - (P.key > 5 ? 12 : 0); // (v9.4) planTx: this build's own effect
-      if (bx.fx === 'riser') S.push(sec.bar0 * 16, CH.fx, FX_KIND.riser, bx.end === 'tape' || bx.end === 'repeat' ? 0.75 : 1, sec.bars * 16, 0, 0);
+      if (tx.rise != null) S.push(sec.bar0 * 16, CH.fx, FX_KIND.tx, (bx.end === 'tape' || bx.end === 'repeat' ? 0.75 : 1) * (bx.fx === 'none' ? 0.75 : 1), sec.bars * 16, tx.rise, txN, txT);
+      else if (tx.wash != null) S.push(e0 - Math.min(4, sec.bars) * 16, CH.fx, FX_KIND.tx, 0.8, Math.min(4, sec.bars) * 16, tx.wash, txN, txT);
+      else if (tx.swell != null) S.push(e0 - Math.min(2, sec.bars) * 16, CH.fx, FX_KIND.tx, 0.8, Math.min(2, sec.bars) * 16, tx.swell, txN, txT);
+      else if (bx.fx === 'riser') S.push(sec.bar0 * 16, CH.fx, FX_KIND.riser, bx.end === 'tape' || bx.end === 'repeat' ? 0.75 : 1, sec.bars * 16, 0, 0);
       else if (bx.fx === 'rise') S.push(e0 - Math.min(2, sec.bars) * 16, CH.fx, FX_KIND.rise, 0.8, Math.min(2, sec.bars) * 16, 0, note, 0);
       else if (bx.fx === 'sweep') S.push(e0 - Math.min(2, sec.bars) * 16, CH.fx, FX_KIND.sweep, 0.8, Math.min(2, sec.bars) * 16, 0, 0);
       else if (bx.fx === 'reverse') S.push(e0 - 8, CH.fx, FX_KIND.reverse, 0.7, 8, 0, 0);
       else if (bx.fx === 'swirl') S.push(e0 - 16, CH.fx, FX_KIND.swirl, 0.75, 16, 0, note, 0);
       else if (bx.fx === 'zap') S.push(e0 - 8, CH.fx, FX_KIND.zap, 0.7, 8, 0, note, 0);
       if (bx.shape === 'roll' || bx.shape === 'lateroll' || bx.shape === 'clap') { if (bx.end === 'roll' || bx.end === 'filter' || !bx.end) S.push((sec.bar0 + sec.bars - 1) * 16, CH.fx, FX_KIND.snareup, 0.8, 16, 0, 0); } } // the snare-up belongs to a snare build
-    if (sec.type === 'drop' || sec.layer === 'tease') { S.push(sec.bar0 * 16, CH.fx, FX_KIND.impact, sec.layer === 'tease' ? 0.7 : 1, 32, 0, 0); }
-    if (sec.type === 'break' && si > 0) { const fx = sec.ix ? sec.ix.fx : 'down'; if (fx === 'down') S.push(sec.bar0 * 16, CH.fx, FX_KIND.down, 0.9, 32, 0, 0); else if (fx === 'crash') S.push(sec.bar0 * 16, CH.fx, FX_KIND.crash, 0.6, 32, 0, 0); else if (fx === 'sweep') S.push(sec.bar0 * 16, CH.fx, FX_KIND.sweep, 0.6, 16, 0, 0); }
-    if (sec.dx === 'reverse') S.push((sec.bar0 + sec.bars) * 16 - 8, CH.fx, FX_KIND.reverse, 0.65, 8, 0, 0); // a breakdown straight into its drop
+    if (sec.type === 'drop' || sec.layer === 'tease') { const iv = sec.layer === 'tease' ? 0.7 : 1; if (tx.impact != null) S.push(sec.bar0 * 16, CH.fx, FX_KIND.tx, iv, 32, tx.impact, txN, txT); else S.push(sec.bar0 * 16, CH.fx, FX_KIND.impact, iv, 32, 0, 0); if (tx.sub != null) S.push(sec.bar0 * 16, CH.fx, FX_KIND.tx, 0.85, 16, tx.sub, 36 + (P.key % 12), txT); }
+    if (sec.type === 'break' && si > 0) { const fx = sec.ix ? sec.ix.fx : 'down'; if (fx === 'down' && tx.down != null) S.push(sec.bar0 * 16, CH.fx, FX_KIND.tx, 0.9, 32, tx.down, txN, txT); else if (fx === 'down') S.push(sec.bar0 * 16, CH.fx, FX_KIND.down, 0.9, 32, 0, 0); else if (fx === 'crash') S.push(sec.bar0 * 16, CH.fx, FX_KIND.crash, 0.6, 32, 0, 0); else if (fx === 'sweep') S.push(sec.bar0 * 16, CH.fx, FX_KIND.sweep, 0.6, 16, 0, 0); }
+    if (sec.dx === 'reverse') { if (tx.swell != null) S.push((sec.bar0 + sec.bars) * 16 - 16, CH.fx, FX_KIND.tx, 0.7, 16, tx.swell, txN, txT); else S.push((sec.bar0 + sec.bars) * 16 - 8, CH.fx, FX_KIND.reverse, 0.65, 8, 0, 0); } // a breakdown straight into its drop
     if (next && (next.type === 'groove') && sec.type === 'intro') S.push((next.bar0 - 1) * 16, CH.fx, FX_KIND.sweep, 0.7, 16, 0, 0);
 
     // additive arrangement ("flow"): in intros, grooves and outros the parts that are NEW in this section enter one or two at a

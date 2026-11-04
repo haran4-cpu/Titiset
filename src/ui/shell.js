@@ -39,6 +39,7 @@ function buildShell() { const app = $('.app'), con = $('.console'); if (!app || 
   if (mixer) into('mix').appendChild(mixer); con.remove(); const ds = document.createElement('section'); ds.className = 'decksound'; into('mix').appendChild(ds); buildDeckSound(ds);
   // FX: the Beat FX, then the performance pads (moved out of the decks)
   const fx = document.createElement('div'); fx.className = 'bfx'; fx.setAttribute('aria-label', 'Beat FX'); into('fx').appendChild(fx); buildBeatFx(fx);
+  const rz = document.createElement('div'); rz.className = 'risers'; into('fx').appendChild(rz); buildRisers(rz);
   const os = document.createElement('div'); os.className = 'oneshots'; into('fx').appendChild(os); buildOneShots(os);
   const pads = document.createElement('div'); pads.className = 'fx-pads'; into('fx').appendChild(pads); for (const p of $$('.perf')) pads.appendChild(p);
   // EDIT: the editor
@@ -69,7 +70,7 @@ function buildBeatFx(el) {
       <div class="bfx-side"><label class="lbl" for="bfxDepth">Depth</label><input id="bfxDepth" class="bfx-depth" type="range" min="0" max="1" step="0.01" aria-label="Depth">
         <button class="bfx-q" aria-pressed="true" title="Switch on the next beat">Quantize</button><button class="bfx-on big" aria-pressed="false">FX ON</button></div></div>
     <div class="bfx-params"></div>`;
-  $$('[data-bd]', el).forEach((b) => b.onclick = () => { SHELL.fxDeck = +b.dataset.bd; renderBeatFx(); const d = $('.os-d'); if (d) d.textContent = 'AB'[SHELL.fxDeck]; });
+  $$('[data-bd]', el).forEach((b) => b.onclick = () => { SHELL.fxDeck = +b.dataset.bd; renderBeatFx(); $$('.os-d').forEach((d) => { d.textContent = 'AB'[SHELL.fxDeck]; }); renderRisers(); });
   $('.bfx-target', el).onchange = (e) => bfxTarget(SHELL.fxDeck, +e.target.value);
   $$('[data-fx]', el).forEach((b) => b.onclick = () => { bfxOf(SHELL.fxDeck).sel = b.dataset.fx; renderBeatFx(); });
   $$('[data-beat]', el).forEach((b) => b.onclick = () => { const i = SHELL.fxDeck, B = bfxOf(i), F = B.fx[B.sel]; F.beat = +b.dataset.beat; if (F.on) bfxSend(i, B.sel, 'now'); renderBeatFx(); });
@@ -119,6 +120,38 @@ async function loadUserSample(key, file) { if (!A.ctx) throw new Error('start th
 function removeUserSample(key) { delete USER_SAMPLES[key]; sendSample(key); sampTx('readwrite', (s) => s.delete(key)).catch(() => {}); }
 async function restoreUserSamples() { try { const keys = await sampTx('readonly', (s) => s.getAllKeys()); for (const k of keys || []) { const v = await sampTx('readonly', (s) => s.get(k)); if (v && v.data && (!A.ctx || v.sr === A.ctx.sampleRate)) { USER_SAMPLES[k] = v; sendSample(k); } } } catch (e) { /* no storage: nothing to restore */ } }
 // ---- (v9.3) the FX screen's one-shots (risers, impacts, throws) and the MIX screen's deck sound (sends, character, the room) ----
+// ---- (v9.5) TRANSITIONS: the layered recipes (src/engine/06c_risers.js) played live — a riser, downlifter, sub drop, impact, swell
+// or wash from the deck's own genre family (or any), lasting 1–8 bars, landing exactly on the next line it can reach (a riser ends
+// on it; a downlifter, sub drop or impact starts on it or on the next beat), in the key of the track, with an impact on the landing
+const RZ = { type: 'rise', rec: -1, bars: 2, land: 'line', hit: true, all: false };
+const RZ_TYPES = [['rise', 'Riser'], ['down', 'Downlifter'], ['sub', 'Sub drop'], ['impact', 'Impact'], ['swell', 'Swell'], ['wash', 'Wash']];
+const rzName = (id) => id.replace(/-/g, ' ');
+function rzFam(i) { const D = decks[i], G = D && GENRE_BY_ID[D.gid]; return G ? G.family : 'house'; }
+function rzList(i) { const fam = rzFam(i), fit = new Set(txRecipesFor(fam, RZ.type)); return TX_RECIPES.filter((r) => r.type === RZ.type && (RZ.all || fit.has(r.k))).map((r) => ({ k: r.k, id: r.id, fit: fit.has(r.k) })); }
+function buildRisers(el) { el.innerHTML = `<h4>Transitions — risers, drops and impacts on deck <span class="os-d">A</span></h4><div class="dk-chips rz-t" role="group" aria-label="Kind">${RZ_TYPES.map(([k, l]) => `<button class="dk-chip" data-rzt="${k}">${l}</button>`).join('')}</div>
+  <div class="dk-chips rz-r" role="group" aria-label="Recipe"></div><div class="rz-row"><span class="lbl">Length</span><div class="seg" role="group" aria-label="Length">${[1, 2, 4, 8].map((b) => `<button data-rzb="${b}">${b} bar${b > 1 ? 's' : ''}</button>`).join('')}</div>
+  <span class="lbl">Land</span><div class="seg" role="group" aria-label="Land"><button data-rzl="line">on the line</button><button data-rzl="now">on the beat</button></div><label class="rz-hit"><input type="checkbox" data-rzh checked> impact on the landing</label><label class="rz-hit"><input type="checkbox" data-rza> every genre's</label></div>
+  <div class="rz-go"><button class="btn primary" data-rzgo>Fire</button><button class="btn" data-rzdice title="A recipe from this genre's own, at random">Dice</button><span class="rz-info"></span></div>`;
+  $$('[data-rzt]', el).forEach((b) => b.onclick = () => { RZ.type = b.dataset.rzt; RZ.rec = -1; renderRisers(); });
+  $$('[data-rzb]', el).forEach((b) => b.onclick = () => { RZ.bars = +b.dataset.rzb; renderRisers(); });
+  $$('[data-rzl]', el).forEach((b) => b.onclick = () => { RZ.land = b.dataset.rzl; renderRisers(); });
+  $('[data-rzh]', el).onchange = (e) => { RZ.hit = e.target.checked; }; $('[data-rza]', el).onchange = (e) => { RZ.all = e.target.checked; RZ.rec = -1; renderRisers(); };
+  $('[data-rzgo]', el).onclick = async () => { await startAudio(); fireTransition(SHELL.fxDeck); };
+  $('[data-rzdice]', el).onclick = async () => { const L = rzList(SHELL.fxDeck).filter((x) => x.fit); if (!L.length) return; RZ.rec = L[Math.floor(Math.random() * L.length)].k; renderRisers(); await startAudio(); fireTransition(SHELL.fxDeck); };
+  renderRisers(); }
+function renderRisers() { const el = $('.risers'); if (!el) return; const i = SHELL.fxDeck, L = rzList(i); if (RZ.rec < 0 || !L.some((x) => x.k === RZ.rec)) RZ.rec = L.length ? L[0].k : -1;
+  $$('[data-rzt]', el).forEach((b) => b.classList.toggle('on', b.dataset.rzt === RZ.type)); $$('[data-rzb]', el).forEach((b) => { b.classList.toggle('on', +b.dataset.rzb === RZ.bars); b.disabled = RZ.type === 'impact' || RZ.type === 'sub'; });
+  $$('[data-rzl]', el).forEach((b) => b.classList.toggle('on', b.dataset.rzl === RZ.land)); const d = $('.os-d', el); if (d) d.textContent = 'AB'[i];
+  $('.rz-r', el).innerHTML = L.map((x) => `<button class="dk-chip${x.k === RZ.rec ? ' on' : ''}" data-rzr="${x.k}">${rzName(x.id)}</button>`).join('') || '<span class="dim">none for this genre — tick "every genre\'s"</span>';
+  $$('[data-rzr]', el).forEach((b) => b.onclick = () => { RZ.rec = +b.dataset.rzr; renderRisers(); }); }
+function fireTransition(i) { const D = decks[i], s = D && D.score; if (!s) { toast('Load a track first'); return; } if (RZ.rec < 0) return; const R = TX_RECIPES[RZ.rec], pos = schedPos(D), key = s.meta.key % 12, third = (MODES[s.meta.mode] || MODES.minor)[2] === 4 ? 4 : 3;
+  const note = R.type === 'sub' ? 36 + key : 60 + key, len = R.type === 'impact' ? 32 : R.type === 'sub' ? 16 : RZ.bars * 16, ends = R.type === 'rise' || R.type === 'swell';
+  const line = (min) => { let at = Math.ceil((pos + min) / 64) * 64; return at; }; let start, end;
+  if (!D.playing) { start = -1; end = len; } else if (RZ.land === 'line') { if (ends) { end = line(Math.max(len, 4)); start = end - len; if (start < pos) start = Math.ceil(pos + 0.05); } else { start = line(2); end = start + len; } } else { start = Math.ceil(pos + 0.05); end = start + len; }
+  const msg = { type: 'fxNow', kind: 13, rec: RZ.rec, v: 0.95, until: end, note, pan: third }; if (start < 0) send(Object.assign({ deck: i, steps: len }, msg, { until: undefined })); else send({ type: 'at', deck: i, atStep: start, list: [msg] });
+  if (RZ.hit && ends && D.playing) { const imp = txRecipesFor(rzFam(i), 'impact'); if (imp.length) send({ type: 'at', deck: i, atStep: end, list: [{ type: 'fxNow', kind: 13, rec: imp[Math.floor(Math.random() * imp.length)], v: 0.9, steps: 32, note: 60 + key, pan: third }] }); }
+  const where = D.playing ? (ends ? `lands on bar ${Math.floor(end / 16) + 1}` : `starts on bar ${Math.floor(start / 16) + 1}${start % 16 ? ' (next beat)' : ''}`) : 'now';
+  const info = $('.rz-info'); if (info) info.textContent = `${rzName(R.id)} — ${where}`; }
 function buildOneShots(el) { el.innerHTML = `<h4>One-shots — fire now on deck <span class="os-d">A</span></h4><div class="pgrid os">${FX_PADS.map(([l, k, st, ear], n) => `<button class="pad" data-os="${n}">${l}<small>${ear != null ? 'in key' : st / 16 >= 1 ? st / 16 + ' bar' + (st > 16 ? 's' : '') : st / 4 + ' beats'}</small></button>`).join('')}<button class="pad" data-osthrow="8">Echo throw<small>½ bar</small></button><button class="pad" data-osthrow="16">Echo throw<small>1 bar</small></button></div>`;
   $$('[data-os]', el).forEach((b) => b.onclick = async () => { await startAudio(); const i = SHELL.fxDeck, [, k, st, ear] = FX_PADS[+b.dataset.os]; if (ear != null) earCandy(i, ear); else send({ type: 'fxNow', deck: i, kind: k, steps: st }); });
   $$('[data-osthrow]', el).forEach((b) => b.onclick = () => send({ type: 'throw', deck: SHELL.fxDeck, steps: +b.dataset.osthrow })); }

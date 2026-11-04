@@ -558,3 +558,11 @@ body.shell { height: 100vh; height: 100dvh; overflow: hidden; padding-bottom: 0 
 /* (v9.4) the sound browser's character filter, and the engine / character on each card */
 .dk-tagf { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; } .dk-tagf button { min-height: 36px; padding: 0 10px; border-radius: 18px; border: 1px solid var(--line2); background: var(--panel2); font-size: 13px; } .dk-tagf button.on { border-color: var(--acc); color: var(--acc); }
 .dk-pcard i, .dk-pcard em { display: block; font-size: 11px; color: var(--dim); font-style: normal; } .dk-pcard em { opacity: .85; } .dk-pcard[hidden] { display: none; }
+
+/* (v9.5) transitions on the FX screen */
+.risers { display: grid; gap: 8px; margin-bottom: 14px; }
+.rz-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.rz-hit { display: inline-flex; gap: 6px; align-items: center; font: 500 12px var(--f-data); color: var(--dim); }
+.rz-go { display: flex; gap: 8px; align-items: center; }
+.rz-info { font: 500 12px var(--f-data); color: var(--dim); }
+.rz-r { max-height: 132px; overflow: auto; }

@@ -77,7 +77,15 @@ const OUT = process.argv[2] || '.'; let fails = 0; const ok = (c, m) => { consol
   await F(() => { const r = document.querySelector('.perf[data-d="0"] [data-mac="stabCut"]'); if (r) { r.value = 0.2; r.oninput(); } });
   ok(await F(() => window.__sent.some((m) => m.type === 'kit' && m.slot === 'chords' && (m.p.cut != null || m.p.tone != null))) || !(await F(() => !!document.querySelector('.perf[data-d="0"] [data-mac="stabCut"]'))), 'macro: stab filter reaches the chords sound');
   if (!(await F(() => window.__forge.decks[0].playing))) { await F(() => document.querySelector('.deck [data-act=play]').click()); await page.waitForTimeout(1500); } await F(() => document.querySelector('.perf[data-d="0"] [data-pdrop]').click()); await page.waitForTimeout(150);
-  ok(await F(() => window.__sent.some((m) => m.type === 'fxNow' && m.kind === 0) && window.__sent.some((m) => m.type === 'jump')), 'BUILD → DROP: a riser now and a jump to the drop on the line');
+  ok(await F(() => window.__sent.some((m) => m.type === 'fxNow' && (m.kind === 0 || (m.kind === 13 && m.rec >= 0 && m.until > 0))) && window.__sent.some((m) => m.type === 'jump')), 'BUILD → DROP: a riser now (v9.5: a layered recipe of the genre) and a jump to the drop on the line');
+  // (v9.5) the transitions panel on the FX screen: a downlifter recipe fired on the line, then a riser that ends on a line with an impact on it
+  { await F(() => { window.__sent = []; window.__forge.shell.go('fx'); }); await page.waitForTimeout(300);
+    await F(() => { document.querySelector('[data-rzt="down"]').click(); document.querySelector('[data-rzgo]').click(); }); await page.waitForTimeout(100);
+    const d = await F(() => { const m = window.__sent.find((x) => x.type === 'at' && x.list && x.list[0].kind === 13); return m ? { at: m.atStep, rec: m.list[0].rec, until: m.list[0].until } : null; });
+    ok(!!d && d.at % 64 === 0 && d.until - d.at === 32, `transitions: a downlifter starts on the next 4-bar line and lasts 2 bars${d ? ` (step ${d.at}, recipe ${d.rec})` : ''}`);
+    await F(() => { window.__sent = []; document.querySelector('[data-rzt="rise"]').click(); document.querySelector('[data-rzb="4"]').click(); document.querySelector('[data-rzgo]').click(); }); await page.waitForTimeout(100);
+    const r = await F(() => { const L = window.__sent.filter((x) => x.type === 'at' && x.list && x.list[0].kind === 13); return L.map((m) => ({ at: m.atStep, until: m.list[0].until })); });
+    ok(r.length === 2 && r[0].until % 64 === 0 && r[1].at === r[0].until, `transitions: a 4-bar riser ends on a 4-bar line, an impact lands on it${r.length ? ` (${JSON.stringify(r)})` : ''}`); await F(() => window.__forge.shell.go('play')); }
   await F(() => { window.__forge.shell.SHELL.fxDeck = 0; document.querySelector('[data-osthrow="8"]').click(); }); await page.waitForTimeout(100); ok(await F(() => window.__sent.some((m) => m.type === 'throw' && m.deck === 0)), 'ECHO THROW one-shot on the FX screen');
   await F(() => window.__forge.perf.setPerform(false)); await page.waitForTimeout(300); await page.click('[data-tab="chords"]'); await page.waitForTimeout(300);
   await page.click('[data-crh="..x..x....x..x.."]'); await page.waitForTimeout(400);

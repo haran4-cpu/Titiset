@@ -146,7 +146,9 @@ function buildToDrop(i) { const D = decks[i]; if (!D.score || !D.playing) return
   const pos = schedPos(D); let at = Math.ceil((pos + 1) / 64) * 64; if (at - pos < 16) at += 64; const len = at - pos;
   // the riser ends exactly on the line wherever it starts, and the snare-up for the last bar is held by the engine and starts on its exact sample
   // (a page timer put it a few tens of ms off, more when the page was busy)
-  send({ type: 'fxNow', deck: i, kind: 0, v: 0.9, until: at }); send({ type: 'at', deck: i, atStep: at - 16, list: [{ type: 'fxNow', kind: 4, v: 0.8, until: at }] });
+  { const G = GENRE_BY_ID[D.gid], fam = G ? G.family : 'house', L = txRecipesFor(fam, 'rise'), key = D.score.meta.key % 12, third = (MODES[D.score.meta.mode] || MODES.minor)[2] === 4 ? 4 : 3; // (v9.5) a layered riser from the genre's own recipes, a different one each time
+    if (L.length) send({ type: 'fxNow', deck: i, kind: 13, rec: L[Math.floor(Math.random() * L.length)], v: 0.9, until: at, note: 60 + key, pan: third }); else send({ type: 'fxNow', deck: i, kind: 0, v: 0.9, until: at }); }
+  send({ type: 'at', deck: i, atStep: at - 16, list: [{ type: 'fxNow', kind: 4, v: 0.8, until: at }] });
   send({ type: 'jump', deck: i, atStep: at, step: secs[k].bar0 * 16 }); D.pendJump = at; toast(`Build → drop: ${Math.round(len / 16)} bar${len > 16 ? 's' : ''} of riser, the drop lands on bar ${at / 16 + 1}`); }
 // ear candy on a pad (v9): a zap, laser, squelch, bubbles or swirl — in the key of the bar that is playing (a chord tone), panned
 // at random, landing on the next sixteenth (the engine holds it to its step: 'at')
