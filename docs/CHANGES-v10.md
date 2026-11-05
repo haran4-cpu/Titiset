@@ -73,6 +73,17 @@ The review of 10.0, in your words:
   - the atmosphere sent, kept in the track, and brought back from the library.
 - `tools/bank_test.cjs` now starts every render from the same noise. Chords/fm-epiano measured +3.7 LU after 300 other presets and +2.5 LU alone.
 - `tools/listen_v101.cjs` makes the listening pack. The master pairs are level-matched (the 10.0 clip turned down after its master, so its squash stays).
+- `tools/ai_models_test.cjs` expected the validator's old tempo text (60…200). The validator says 50…220 since 10.0; the test now expects that, word for word as before.
+
+## The 10.1 gate (this sandbox, headless Chromium)
+- **Engine and sound (34 steps):** all pass. Bank 403 presets; the signature sounds; true peak −1.14 dBTP.
+- **Browser (31 steps):** 30 pass, including startup (0 dropouts in 4), jumps (0 in 10), every UI test (channels, candy, atmosphere, library, taste, perform), soak, soak-long (10 min), soak-fallback, capture, MIDI, self-check and certification (every genre plays every part it writes).
+- **One fails: liveset.** One dropout in 24 live actions (a reroll, with a 186 ms main-thread task) under 3× CPU emulation on two busy cores. 9.4 fails this step the same way in this sandbox, so it says more about the sandbox than about 10.1. It is reported as failing, not skipped.
+- ai-models failed on the first run (the test's old tempo text, above) and passes after the fix.
+- **Audio audits:**
+  - `audio` (33 renders against ffmpeg) passes: meters within 0.19 LU, highest true peak −1.10 dBTP, the pulse at 100 % of the tempo in 32 of 33. Five ungraded warnings, one more than 10.0: deep house's whole-mix pitch classes match its notes a little more loosely (r 0.51 → 0.45).
+  - **✗ `audio-parts`: 9 of 33 tracks.** The same 9 as in 9.4, 9.5 and 10.0, for the reason given in 9.4: colored timbres whose 3rd or 5th harmonic reads stronger than the audit's model of a note. Their scores are equal or better than 10.0's (lofi chords 0.27 → 0.43, electro lead 0.52 → 0.57).
+  - Ungraded measures (timbre, stabs, voicing, dialogue, texture, arrangement, balance) ran. Balance: drops from −12.2 to −7.0 LUFS track to track (10.0: −12.0 to −7.0).
 
 # DJ TiTo 10 — what changed
 
